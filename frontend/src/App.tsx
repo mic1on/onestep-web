@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { CredentialManager } from "./CredentialManager";
 import { LogsPanel } from "./LogsPanel";
-import { PipelineEditor } from "./PipelineEditor";
+import { PipelineEditor, validatePipelineGraphConditions } from "./PipelineEditor";
 import type { ConnectorDescriptor, Credential, Pipeline, PipelineGraph } from "./types";
 
 const EMPTY_GRAPH: PipelineGraph = { nodes: [], edges: [] };
@@ -67,6 +67,11 @@ export function App() {
   }
 
   async function startPipeline() {
+    const conditionError = firstConditionError(draftGraph);
+    if (conditionError) {
+      setMessage(conditionError);
+      return;
+    }
     const pipeline = activePipelineId
       ? await api.updatePipeline(activePipelineId, { name: draftName, graph: draftGraph })
       : await savePipeline();
@@ -106,6 +111,11 @@ export function App() {
 
   async function exportPipeline() {
     if (!activePipelineId) {
+      return;
+    }
+    const conditionError = firstConditionError(draftGraph);
+    if (conditionError) {
+      setMessage(conditionError);
       return;
     }
     const blob = await api.exportPipeline(activePipelineId);
@@ -242,4 +252,8 @@ export function App() {
       )}
     </div>
   );
+}
+
+function firstConditionError(graph: PipelineGraph): string | null {
+  return validatePipelineGraphConditions(graph)[0] ?? null;
 }

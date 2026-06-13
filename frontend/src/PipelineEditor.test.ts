@@ -6,6 +6,8 @@ import {
   handlesForNodeKind,
   nextNodePosition,
   removeGraphNode,
+  validateConditionExpression,
+  validatePipelineGraphConditions,
   validateGraphConnection
 } from "./PipelineEditor";
 import type { GraphNode, PipelineGraph } from "./types";
@@ -163,6 +165,37 @@ describe("graph editing", () => {
       },
       nodeId: "handler_copy_2"
     });
+  });
+});
+
+describe("condition validation", () => {
+  it("accepts plain and template-wrapped condition expressions", () => {
+    expect(validateConditionExpression('status == "paid"')).toBeNull();
+    expect(validateConditionExpression('{{ amount >= 100 and status == "paid" }}')).toBeNull();
+    expect(validateConditionExpression("")).toBeNull();
+  });
+
+  it("rejects common invalid condition expressions", () => {
+    expect(validateConditionExpression('status = "paid"')).toBe("Use == for comparisons; assignments are not valid conditions.");
+    expect(validateConditionExpression('status == "paid')).toBe("Unclosed string literal.");
+    expect(validateConditionExpression("(amount > 100")).toBe('Unclosed "(".');
+    expect(validateConditionExpression("status ==")).toBe("Condition cannot end with an operator.");
+    expect(validateConditionExpression('status == "paid" && amount > 100')).toBe("Use Python-style and/or instead of &&/||.");
+  });
+
+  it("validates conditions against graph edge semantics", () => {
+    const graph: PipelineGraph = {
+      nodes: [source("source"), handler("handler"), sink("sink")],
+      edges: [
+        { from: "source", to: "handler", condition: 'status == "paid"' },
+        { from: "handler", to: "sink", condition: "amount ==" }
+      ]
+    };
+
+    expect(validatePipelineGraphConditions(graph)).toEqual([
+      "Connection source -> handler: conditions can only start from handler nodes.",
+      "Connection handler -> sink: Condition cannot end with an operator."
+    ]);
   });
 });
 

@@ -87,6 +87,12 @@ export function PipelineEditor({
   const selectedGraphEdgeSource = selectedGraphEdge
     ? graph.nodes.find((node) => node.id === selectedGraphEdge.from) ?? null
     : null;
+  const selectedEdgeConditionError = selectedGraphEdge
+    ? validateGraphEdgeCondition(graph, selectedGraphEdge)
+    : null;
+  const selectedEdgeConditionFields = selectedGraphEdgeSource?.kind === "handler"
+    ? conditionFieldSuggestions(debugSamples[selectedGraphEdgeSource.id])
+    : [];
 
   const updateFromFlow = useCallback(
     (nextNodes: Node[], nextEdges: Edge[]) => {
@@ -305,6 +311,14 @@ export function PipelineEditor({
     });
   }, [graph, onGraphChange, selectedEdgeId]);
 
+  const insertSelectedEdgeConditionField = useCallback((fieldName: string) => {
+    if (!selectedGraphEdge) {
+      return;
+    }
+    const current = selectedGraphEdge.condition?.trim() ?? "";
+    updateSelectedEdgeCondition(current ? `${current} and ${fieldName} == ""` : `${fieldName} == ""`);
+  }, [selectedGraphEdge, updateSelectedEdgeCondition]);
+
   const addConnectorNode = useCallback((connector: ConnectorDescriptor) => {
     const count = graph.nodes.length + 1;
     const nextNode = createGraphNode(
@@ -414,14 +428,38 @@ export function PipelineEditor({
               {selectedGraphEdge.to}
             </span>
             {selectedGraphEdgeSource?.kind === "handler" ? (
-              <label className="edge-condition-field">
-                <span>Condition</span>
-                <input
-                  onChange={(event) => updateSelectedEdgeCondition(event.target.value)}
-                  placeholder='status == "paid"'
-                  value={selectedGraphEdge.condition ?? ""}
-                />
-              </label>
+              <div className={`edge-condition-editor ${selectedEdgeConditionError ? "invalid" : ""}`}>
+                <label className="edge-condition-field">
+                  <span>When</span>
+                  <input
+                    aria-invalid={selectedEdgeConditionError ? "true" : "false"}
+                    onChange={(event) => updateSelectedEdgeCondition(event.target.value)}
+                    placeholder='status == "paid"'
+                    value={selectedGraphEdge.condition ?? ""}
+                  />
+                </label>
+                {selectedEdgeConditionFields.length ? (
+                  <div className="condition-field-suggestions">
+                    <span>Fields</span>
+                    {selectedEdgeConditionFields.map((field) => (
+                      <button
+                        key={field}
+                        onClick={() => insertSelectedEdgeConditionField(field)}
+                        type="button"
+                      >
+                        {field}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="edge-condition-hint">Use handler result fields. Empty means always emit.</p>
+                )}
+                {selectedEdgeConditionError ? (
+                  <p className="edge-condition-error">{selectedEdgeConditionError}</p>
+                ) : null}
+              </div>
+            ) : selectedEdgeConditionError ? (
+              <p className="edge-condition-error">{selectedEdgeConditionError}</p>
             ) : null}
             {selectedGraphEdge.condition ? (
               <button onClick={() => clearEdgeCondition(flowEdgeId(selectedGraphEdge))} type="button">
@@ -564,6 +602,68 @@ export function duplicateGraphNode(
     },
     nodeId: nextNodeId
   };
+}
+
+export function validatePipelineGraphConditions(graph: PipelineGraph): string[] {
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const errors: string[] = [];
+  for (const edge of graph.edges) {
+    const error = validateGraphEdgeCondition(graph, edge, nodesById);
+    if (error) {
+      errors.push(`Connection ${edge.from} -> ${edge.to}: ${error}`);
+    }
+  }
+  return errors;
+}
+
+function validateGraphEdgeCondition(
+  graph: PipelineGraph,
+  edge: GraphEdge,
+  nodesById = new Map(graph.nodes.map((node) => [node.id, node]))
+): string | null {
+  const condition = edge.condition?.trim();
+  if (!condition) {
+    return null;
+  }
+  const source = nodesById.get(edge.from);
+  if (!source) {
+    return "condition references a missing source node.";
+  }
+  if (source.kind !== "handler") {
+    return "conditions can only start from handler nodes.";
+  }
+  return validateConditionExpression(condition);
+}
+
+export function validateConditionExpression(condition: string): string | null {
+  const trimmed = condition.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if ((trimmed.startsWith("{{") && !trimmed.endsWith("}}")) || (!trimmed.startsWith("{{") && trimmed.endsWith("}}"))) {
+    return "Template condition must use matching {{ }} braces.";
+  }
+
+  const expression = conditionExpressionBody(trimmed);
+  if (!expression) {
+    return "Condition cannot be empty.";
+  }
+  if (expression.includes("&&") || expression.includes("||")) {
+    return "Use Python-style and/or instead of &&/||.";
+  }
+  if (expression.includes(";")) {
+    return "Condition must be a single expression.";
+  }
+  if (/(^|[^=!<>])=($|[^=])/.test(expression)) {
+    return "Use == for comparisons; assignments are not valid conditions.";
+  }
+  if (/^(==|!=|<=|>=|<|>|\band\b|\bor\b)/.test(expression.trim())) {
+    return "Condition cannot start with an operator.";
+  }
+  if (/(\band\b|\bor\b|==|!=|<=|>=|<|>|[+\-*/%])\s*$/.test(expression)) {
+    return "Condition cannot end with an operator.";
+  }
+  return validateBalancedExpression(expression);
 }
 
 export function validateGraphConnection(
@@ -716,6 +816,71 @@ function createGraphNode(id: string, type: string, kind: GraphNode["kind"], posi
     input_schema: {},
     position
   };
+}
+
+function conditionExpressionBody(condition: string): string {
+  const match = /^\{\{\s*(.*?)\s*\}\}$/.exec(condition);
+  return (match ? match[1] : condition).trim();
+}
+
+function validateBalancedExpression(expression: string): string | null {
+  const stack: string[] = [];
+  let quote: "\"" | "'" | null = null;
+  let escaped = false;
+  const opening = new Set(["(", "[", "{"]);
+  const closing: Record<string, string> = {
+    ")": "(",
+    "]": "[",
+    "}": "{"
+  };
+
+  for (const char of expression) {
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (opening.has(char)) {
+      stack.push(char);
+      continue;
+    }
+    const expected = closing[char];
+    if (expected) {
+      const actual = stack.pop();
+      if (actual !== expected) {
+        return `Unexpected "${char}".`;
+      }
+    }
+  }
+
+  if (quote) {
+    return "Unclosed string literal.";
+  }
+  const unclosed = stack.pop();
+  if (unclosed) {
+    return `Unclosed "${unclosed}".`;
+  }
+  return null;
+}
+
+function conditionFieldSuggestions(value: unknown): string[] {
+  const sample = Array.isArray(value) ? value[0] : value;
+  if (!sample || typeof sample !== "object") {
+    return [];
+  }
+  return Object.keys(sample)
+    .filter((key) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key))
+    .slice(0, 8);
 }
 
 function nextDuplicateNodeId(graph: PipelineGraph, nodeId: string): string {

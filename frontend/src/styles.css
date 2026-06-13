@@ -346,7 +346,14 @@ button:active,
   gap: 6px;
 }
 
-.edge-condition-field span {
+.edge-condition-editor {
+  display: grid;
+  gap: 5px;
+  max-width: min(420px, calc(100vw - 160px));
+}
+
+.edge-condition-field span,
+.condition-field-suggestions span {
   color: var(--muted);
   font-size: 12px;
   text-transform: uppercase;
@@ -355,6 +362,43 @@ button:active,
 .edge-condition-field input {
   min-height: 28px;
   padding: 4px 8px;
+}
+
+.edge-condition-editor.invalid .edge-condition-field input {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgb(215 25 33 / 12%);
+}
+
+.condition-field-suggestions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.condition-field-suggestions button {
+  min-height: 24px;
+  border-color: var(--line);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 7px;
+}
+
+.edge-condition-hint,
+.edge-condition-error {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.edge-condition-hint {
+  color: var(--muted);
+}
+
+.edge-condition-error {
+  color: var(--accent-2);
 }
 
 .canvas-context-menu {
