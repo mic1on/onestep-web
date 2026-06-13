@@ -27,6 +27,7 @@ CONNECTORS: list[ConnectorDescriptor] = [
             ConnectorField(name="exchange", label="Exchange"),
             ConnectorField(name="routing_key", label="Routing"),
             ConnectorField(name="prefetch", label="Prefetch", type="number"),
+            ConnectorField(name="sample_payload", label="Sample Payload JSON"),
         ],
     ),
     ConnectorDescriptor(
@@ -52,6 +53,7 @@ CONNECTORS: list[ConnectorDescriptor] = [
             ConnectorField(name="url", label="Queue URL", required=True),
             ConnectorField(name="wait_time_s", label="Wait Time", type="number"),
             ConnectorField(name="visibility_timeout", label="Visibility Timeout", type="number"),
+            ConnectorField(name="sample_payload", label="Sample Payload JSON"),
         ],
     ),
     ConnectorDescriptor(

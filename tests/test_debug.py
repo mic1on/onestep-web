@@ -118,6 +118,52 @@ def test_debug_refuses_rabbitmq_sample_fetch_to_avoid_mutation(client: TestClien
     assert "mutate queue state" in body["message"]
 
 
+def test_debug_fetches_rabbitmq_configured_sample_payload(client: TestClient) -> None:
+    response = client.post(
+        "/api/debug/nodes/fetch-sample",
+        json={
+            "node": {
+                "id": "queue",
+                "type": "rabbitmq_source",
+                "kind": "source",
+                "config": {
+                    "queue": "orders",
+                    "sample_payload": "{\"order_id\":\"A001\",\"amount\":99.5}",
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["message"] == "generated configured queue sample payload"
+    assert body["data"] == [{"order_id": "A001", "amount": 99.5}]
+    assert body["schema"] == [{"order_id": "str", "amount": "float"}]
+
+
+def test_debug_fetches_sqs_configured_sample_payload(client: TestClient) -> None:
+    response = client.post(
+        "/api/debug/nodes/fetch-sample",
+        json={
+            "node": {
+                "id": "sqs",
+                "type": "sqs_source",
+                "kind": "source",
+                "config": {
+                    "url": "https://sqs.us-east-1.amazonaws.com/123/orders",
+                    "sample_payload": {"order_id": "A002", "source": "sqs"},
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["data"] == [{"order_id": "A002", "source": "sqs"}]
+
+
 def test_debug_fetches_redis_stream_sample(client: TestClient, monkeypatch) -> None:
     async def fake_fetch_redis_sample(
         self,

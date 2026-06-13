@@ -93,9 +93,17 @@ class PipelineDebugger:
                 payload = self._webhook_sample_payload(node)
                 return _result("ok", "generated webhook sample payload", data=[payload], started=started)
             if node.type.startswith(("rabbitmq_", "sqs_")) and _node_kind(node) == "source":
+                payload = self._queue_sample_payload(node)
+                if payload is not None:
+                    return _result(
+                        "ok",
+                        "generated configured queue sample payload",
+                        data=[payload],
+                        started=started,
+                    )
                 return _result(
                     "unsupported",
-                    f"{node.type} sample fetch is disabled because peeking can mutate queue state",
+                    f"{node.type} sample fetch requires sample_payload because peeking can mutate queue state",
                     started=started,
                 )
             if node.type in {"cron_source", "interval_source"}:
@@ -313,6 +321,17 @@ class PipelineDebugger:
             "path": node.config.get("path", f"/webhooks/{node.id}"),
             "body": {"event": "sample"},
         }
+
+    @staticmethod
+    def _queue_sample_payload(node: GraphNode) -> dict[str, Any] | None:
+        if "sample_payload" not in node.config:
+            return None
+        payload = _parse_json_config(node.config.get("sample_payload"))
+        if isinstance(payload, dict):
+            return dict(payload)
+        if payload is not None:
+            return {"payload": payload}
+        return None
 
 
 def _result(

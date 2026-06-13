@@ -39,8 +39,15 @@ def test_connectors_endpoint_includes_spec_nodes(client: TestClient) -> None:
     response = client.get("/api/connectors")
 
     assert response.status_code == 200
-    connector_types = {item["type"] for item in response.json()["items"]}
+    connectors = response.json()["items"]
+    connector_types = {item["type"] for item in connectors}
     assert {"rabbitmq_source", "handler", "mysql_sink", "http_sink"} <= connector_types
+    fields_by_type = {
+        item["type"]: {field["name"] for field in item["fields"]}
+        for item in connectors
+    }
+    assert "sample_payload" in fields_by_type["rabbitmq_source"]
+    assert "sample_payload" in fields_by_type["sqs_source"]
 
 
 def test_credentials_are_returned_masked(client: TestClient) -> None:
