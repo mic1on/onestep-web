@@ -34,3 +34,45 @@ def sample_graph() -> dict:
             {"from": "n2", "to": "n3"},
         ],
     }
+
+
+def scheduled_http_graph() -> dict:
+    return {
+        "nodes": [
+            {
+                "id": "tick",
+                "type": "cron_source",
+                "kind": "source",
+                "config": {
+                    "expression": "0 0 1 1 *",
+                    "timezone": "UTC",
+                    "overlap": "skip",
+                    "immediate": False,
+                },
+                "position": {"x": 120, "y": 160},
+            },
+            {
+                "id": "shape",
+                "type": "handler",
+                "kind": "handler",
+                "mode": "visual",
+                "mapping": {"status": "scheduled", "source": "{{source}}"},
+                "position": {"x": 420, "y": 160},
+            },
+            {
+                "id": "notify",
+                "type": "http_sink",
+                "kind": "sink",
+                "config": {
+                    "url": "https://example.com/hooks/orders",
+                    "method": "POST",
+                    "success_statuses": [200, 202],
+                },
+                "position": {"x": 720, "y": 160},
+            },
+        ],
+        "edges": [
+            {"from": "tick", "to": "shape"},
+            {"from": "shape", "to": "notify"},
+        ],
+    }

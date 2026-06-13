@@ -141,7 +141,7 @@ def create_api(db: Database | None = None) -> FastAPI:
                 pipeline.id,
                 graph,
                 await _credential_map(session, state),
-                _log_writer(session, state, pipeline.id),
+                _runtime_log_writer(state, pipeline.id),
             )
         except PipelineCompileError as exc:
             pipeline.status = "error"
@@ -160,7 +160,7 @@ def create_api(db: Database | None = None) -> FastAPI:
         state: AppState = Depends(app_state),
     ) -> RuntimeStatus:
         pipeline = await _get_pipeline(session, pipeline_id)
-        result = await state.runtime.stop(pipeline.id, _log_writer(session, state, pipeline.id))
+        result = await state.runtime.stop(pipeline.id, _runtime_log_writer(state, pipeline.id))
         pipeline.status = result.status
         pipeline.updated_at = utcnow()
         await session.commit()
@@ -175,7 +175,12 @@ def create_api(db: Database | None = None) -> FastAPI:
         pipeline = await _get_pipeline(session, pipeline_id)
         graph = PipelineGraph.model_validate(pipeline.graph_json)
         try:
-            exported = state.exporter.export(pipeline.id, pipeline.name, graph)
+            exported = state.exporter.export(
+                pipeline.id,
+                pipeline.name,
+                graph,
+                credentials=await _credential_map(session, state),
+            )
         except PipelineCompileError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
@@ -335,6 +340,16 @@ def _log_writer(session: AsyncSession, state: AppState, pipeline_id: str):
     async def write(event_kind: str, task_name: str, message: str) -> None:
         await _append_log(session, state, pipeline_id, event_kind, task_name, message)
         await session.commit()
+
+    return write
+
+
+def _runtime_log_writer(state: AppState, pipeline_id: str):
+    async def write(event_kind: str, task_name: str, message: str) -> None:
+        async for session in state.db.session():
+            await _append_log(session, state, pipeline_id, event_kind, task_name, message)
+            await session.commit()
+            return
 
     return write
 

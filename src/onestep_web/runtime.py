@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from typing import Any
 
 from onestep_web.compiler import PipelineCompiler
+from onestep_web.onestep_adapter import build_runtime_app
 from onestep_web.schemas import PipelineGraph, RuntimeStatus
 
 LogSink = Callable[[str, str, str], Awaitable[None]]
@@ -16,6 +18,9 @@ class RuntimeHandle:
     pipeline_id: str
     task: asyncio.Task[None]
     status: str
+    app: Any
+    app_module: str
+    shutdown_timeout_s: float
 
 
 class PipelineRuntimePool:
@@ -33,20 +38,44 @@ class PipelineRuntimePool:
         if pipeline_id in self._tasks:
             await self.stop(pipeline_id, log)
         compiled = self.compiler.compile(graph, credentials)
+        app, module_name = build_runtime_app(
+            pipeline_id,
+            pipeline_id,
+            graph,
+            credentials=credentials,
+            log=log,
+        )
         await log("started", "runtime", f"compiled pipeline order: {', '.join(compiled.order)}")
-        task = asyncio.create_task(self._run_pipeline(pipeline_id, compiled.order, log))
-        self._tasks[pipeline_id] = RuntimeHandle(pipeline_id=pipeline_id, task=task, status="running")
+        task = asyncio.create_task(app.serve())
+        task.add_done_callback(
+            lambda completed: asyncio.create_task(self._record_completion(pipeline_id, completed, log))
+        )
+        self._tasks[pipeline_id] = RuntimeHandle(
+            pipeline_id=pipeline_id,
+            task=task,
+            status="running",
+            app=app,
+            app_module=module_name,
+            shutdown_timeout_s=app.shutdown_timeout_s or 30.0,
+        )
         return RuntimeStatus(pipeline_id=pipeline_id, status="running", message="pipeline started")
 
     async def stop(self, pipeline_id: str, log: LogSink) -> RuntimeStatus:
         handle = self._tasks.pop(pipeline_id, None)
         if handle is None:
             return RuntimeStatus(pipeline_id=pipeline_id, status="stopped", message="pipeline is not running")
-        handle.task.cancel()
+        handle.app.request_shutdown()
         try:
-            await handle.task
+            await asyncio.wait_for(handle.task, timeout=handle.shutdown_timeout_s)
+        except TimeoutError:
+            handle.task.cancel()
+            try:
+                await handle.task
+            except asyncio.CancelledError:
+                pass
         except asyncio.CancelledError:
             pass
+        sys.modules.pop(handle.app_module, None)
         await log("stopped", "runtime", "pipeline stopped")
         return RuntimeStatus(pipeline_id=pipeline_id, status="stopped", message="pipeline stopped")
 
@@ -66,9 +95,18 @@ class PipelineRuntimePool:
             return RuntimeStatus(pipeline_id=pipeline_id, status="stopped", message="pipeline is not running")
         return RuntimeStatus(pipeline_id=pipeline_id, status="running", message="pipeline is running")
 
-    async def _run_pipeline(self, pipeline_id: str, order: list[str], log: LogSink) -> None:
-        while True:
-            await asyncio.sleep(5)
-            timestamp = datetime.now(UTC).isoformat()
-            await log("heartbeat", "runtime", f"{pipeline_id} running {len(order)} nodes at {timestamp}")
-
+    async def _record_completion(
+        self,
+        pipeline_id: str,
+        task: asyncio.Task[None],
+        log: LogSink,
+    ) -> None:
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is None:
+            return
+        handle = self._tasks.pop(pipeline_id, None)
+        if handle is not None:
+            sys.modules.pop(handle.app_module, None)
+        await log("failed", "runtime", f"pipeline failed: {error}")

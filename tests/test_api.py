@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from helpers import sample_graph
+from helpers import sample_graph, scheduled_http_graph
 
 
 def test_pipeline_crud(client: TestClient) -> None:
@@ -53,27 +53,9 @@ def test_credentials_are_returned_masked(client: TestClient) -> None:
 
 
 def test_start_pipeline_validates_graph_and_writes_logs(client: TestClient) -> None:
-    client.post(
-        "/api/credentials",
-        json={
-            "name": "PROD_RABBITMQ",
-            "connector_type": "rabbitmq",
-            "config": {"url": "amqp://user:${PASSWORD}@host:5672/"},
-            "env_vars": {"PASSWORD": "secret"},
-        },
-    )
-    client.post(
-        "/api/credentials",
-        json={
-            "name": "PROD_MYSQL",
-            "connector_type": "mysql",
-            "config": {"url": "mysql://user:${PASSWORD}@host/db"},
-            "env_vars": {"PASSWORD": "secret"},
-        },
-    )
     pipeline = client.post(
         "/api/pipelines",
-        json={"name": "订单同步管道", "description": "demo", "graph": sample_graph()},
+        json={"name": "定时通知管道", "description": "demo", "graph": scheduled_http_graph()},
     ).json()
 
     started = client.post(f"/api/pipelines/{pipeline['id']}/start")
@@ -92,7 +74,7 @@ def test_start_pipeline_validates_graph_and_writes_logs(client: TestClient) -> N
 def test_export_pipeline_returns_zip(client: TestClient) -> None:
     pipeline = client.post(
         "/api/pipelines",
-        json={"name": "订单同步管道", "description": "demo", "graph": sample_graph()},
+        json={"name": "定时通知管道", "description": "demo", "graph": scheduled_http_graph()},
     ).json()
 
     response = client.post(f"/api/pipelines/{pipeline['id']}/export")
