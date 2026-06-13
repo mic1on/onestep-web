@@ -20,7 +20,6 @@ export function PropertyPanel({
   onChange,
   onDebugSample
 }: PropertyPanelProps) {
-  const [connectionResult, setConnectionResult] = useState<DebugResult | null>(null);
   const [sampleResult, setSampleResult] = useState<DebugResult | null>(null);
   const [handlerResult, setHandlerResult] = useState<DebugResult | null>(null);
   const [handlerPayload, setHandlerPayload] = useState("{}");
@@ -32,7 +31,6 @@ export function PropertyPanel({
   const mappingKeySignature = Object.keys(node?.mapping ?? {}).join("\u0000");
 
   useEffect(() => {
-    setConnectionResult(null);
     setSampleResult(null);
     setHandlerResult(null);
     setDebugBusy(null);
@@ -124,17 +122,6 @@ export function PropertyPanel({
     activeConnector.credential_type ? credential.connector_type === activeConnector.credential_type : true
   );
 
-  async function testConnection() {
-    setDebugBusy("connection");
-    try {
-      setConnectionResult(await api.testConnection(activeNode));
-    } catch (error) {
-      setConnectionResult(errorResult(error));
-    } finally {
-      setDebugBusy(null);
-    }
-  }
-
   async function fetchSample() {
     setDebugBusy("sample");
     try {
@@ -204,9 +191,7 @@ export function PropertyPanel({
           ))}
           <DebugActions
             busy={debugBusy}
-            connectionResult={connectionResult}
             onFetchSample={fetchSample}
-            onTestConnection={testConnection}
             sampleResult={sampleResult}
           />
         </section>
@@ -398,15 +383,11 @@ function VisualMappingEditor({
 
 function DebugActions({
   busy,
-  connectionResult,
   sampleResult,
-  onTestConnection,
   onFetchSample
 }: {
   busy: string | null;
-  connectionResult: DebugResult | null;
   sampleResult: DebugResult | null;
-  onTestConnection: () => void;
   onFetchSample: () => void;
 }) {
   return (
@@ -414,15 +395,11 @@ function DebugActions({
       <div className="debug-heading">
         <h3>Debug</h3>
         <div className="debug-actions">
-          <button disabled={busy === "connection"} onClick={onTestConnection} type="button">
-            {busy === "connection" ? "Testing" : "Test Connection"}
-          </button>
           <button disabled={busy === "sample"} onClick={onFetchSample} type="button">
             {busy === "sample" ? "Fetching" : "Fetch Sample"}
           </button>
         </div>
       </div>
-      <DebugResultView result={connectionResult} />
       <DebugResultView result={sampleResult} />
     </div>
   );

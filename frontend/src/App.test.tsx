@@ -77,15 +77,17 @@ describe("App", () => {
     expect(await screen.findByText("Global credentials")).toBeInTheDocument();
     expect(screen.getByLabelText("Host")).toBeInTheDocument();
     expect(screen.getByLabelText("Database")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Password \(secret\)/)).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/\$\{/)).not.toBeInTheDocument();
   });
 
-  it("shows node debug controls when a connector is selected", async () => {
+  it("keeps connection testing out of the builder node panel", async () => {
     render(<App />);
 
     fireEvent.click(await screen.findByText("RabbitMQ Source"));
 
-    expect(await screen.findByText("Test Connection")).toBeInTheDocument();
     expect(await screen.findByText("Fetch Sample")).toBeInTheDocument();
+    expect(screen.queryByText("Test Connection")).not.toBeInTheDocument();
   });
 
   it("does not create default edges when nodes are added to the canvas", async () => {
@@ -184,7 +186,7 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Port"), { target: { value: "3307" } });
     fireEvent.change(screen.getByLabelText("Database"), { target: { value: "orders" } });
     fireEvent.change(screen.getByLabelText("Username"), { target: { value: "sync" } });
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "secret" } });
+    fireEvent.change(screen.getByLabelText(/Password \(secret\)/), { target: { value: "secret" } });
     fireEvent.click(screen.getByText("Add Credential"));
 
     await waitFor(() => expect(onCreate).toHaveBeenCalled());
@@ -195,6 +197,98 @@ describe("App", () => {
       env_vars: { PASSWORD: "secret" }
     });
     expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("tests typed MySQL credentials from the credential page without placeholder variables", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        status: "ok",
+        message: "connection succeeded",
+        data: null,
+        schema: null,
+        stdout: "",
+        stderr: "",
+        duration_ms: 12
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <CredentialManager
+        credentials={[]}
+        onCreate={vi.fn()}
+        onDelete={vi.fn()}
+        onUpdate={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "db.internal" } });
+    fireEvent.change(screen.getByLabelText("Port"), { target: { value: "3307" } });
+    fireEvent.change(screen.getByLabelText("Database"), { target: { value: "orders" } });
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "sync" } });
+    fireEvent.change(screen.getByLabelText(/Password \(secret\)/), { target: { value: "secret" } });
+    fireEvent.click(screen.getByText("Test Connection"));
+
+    expect(await screen.findByText("connection succeeded")).toBeInTheDocument();
+    const fetchCalls = fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>;
+    const requestInit = fetchCalls[0][1];
+    expect(requestInit).toBeDefined();
+    const requestBody = JSON.parse(String(requestInit!.body));
+    expect(requestBody.node).toMatchObject({
+      type: "mysql_source",
+      credential_ref: null,
+      config: { dsn: "mysql://sync:secret@db.internal:3307/orders" }
+    });
+    expect(requestBody.node.config.dsn).not.toContain("${");
+  });
+
+  it("tests edited MySQL credentials with stored masked secrets", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        status: "ok",
+        message: "connection succeeded",
+        data: null,
+        schema: null,
+        stdout: "",
+        stderr: "",
+        duration_ms: 15
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <CredentialManager
+        credentials={[
+          {
+            id: "cred_1",
+            name: "PROD_MYSQL",
+            connector_type: "mysql",
+            config: { dsn: "mysql://sync:${PASSWORD}@db.internal:3307/orders" },
+            env_vars: { PASSWORD: "********" },
+            created_at: "2026-06-13T00:00:00Z",
+            updated_at: "2026-06-13T00:00:00Z"
+          }
+        ]}
+        onCreate={vi.fn()}
+        onDelete={vi.fn()}
+        onUpdate={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText("Edit"));
+    fireEvent.click(screen.getByText("Test Connection"));
+
+    expect(await screen.findByText("connection succeeded")).toBeInTheDocument();
+    const fetchCalls = fetchMock.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>;
+    const requestInit = fetchCalls[0][1];
+    expect(requestInit).toBeDefined();
+    const requestBody = JSON.parse(String(requestInit!.body));
+    expect(requestBody.node).toMatchObject({
+      type: "mysql_source",
+      credential_ref: "PROD_MYSQL",
+      config: { dsn: "mysql://sync:${PASSWORD}@db.internal:3307/orders" }
+    });
+    expect(requestBody.node.config.dsn).not.toContain("********");
   });
 
   it("edits and deletes credentials from the credential manager", async () => {

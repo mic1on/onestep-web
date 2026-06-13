@@ -450,6 +450,13 @@ button:active,
   font-weight: 700;
 }
 
+.field-hint {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .field input,
 .field select,
 .field textarea {
@@ -882,7 +889,33 @@ button:active,
 
 .credential-submit-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.credential-test-result {
+  border: 1px solid var(--line);
+  background: #fff;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.credential-test-result.ok {
+  border-left: 4px solid var(--green);
+}
+
+.credential-test-result.error {
+  border-left: 4px solid var(--accent-2);
+}
+
+.credential-test-result.unsupported {
+  border-left: 4px solid var(--amber);
+}
+
+.credential-test-result p {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .env-var-editor {

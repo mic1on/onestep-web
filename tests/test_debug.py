@@ -4,7 +4,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from onestep_web.debug import PipelineDebugger
+from onestep_web.debug import DebugCredential, PipelineDebugger, _connection_config
+from onestep_web.schemas import GraphNode
 
 
 def test_debug_fetches_schedule_sample(client: TestClient) -> None:
@@ -97,6 +98,32 @@ def test_debug_tests_rabbitmq_connection_provider(
     body = response.json()
     assert body["status"] == "ok"
     assert body["message"] == "connection succeeded"
+
+
+def test_debug_connection_config_overrides_saved_config_with_saved_env_vars() -> None:
+    node = GraphNode.model_validate(
+        {
+            "id": "credential_form",
+            "type": "mysql_source",
+            "kind": "source",
+            "credential_ref": "PROD_MYSQL",
+            "config": {"dsn": "mysql://sync:${PASSWORD}@db.internal:3307/orders"},
+        }
+    )
+
+    config, env_vars = _connection_config(
+        node,
+        {
+            "PROD_MYSQL": DebugCredential(
+                connector_type="mysql",
+                config={"dsn": "mysql://old:${PASSWORD}@old:3306/old"},
+                env_vars={"PASSWORD": "secret"},
+            )
+        },
+    )
+
+    assert config["dsn"] == "mysql://sync:secret@db.internal:3307/orders"
+    assert env_vars == {"PASSWORD": "secret"}
 
 
 def test_debug_refuses_rabbitmq_sample_fetch_to_avoid_mutation(client: TestClient) -> None:

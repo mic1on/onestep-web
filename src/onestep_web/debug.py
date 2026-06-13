@@ -403,7 +403,7 @@ def _connection_config(
         credential = credentials.get(node.credential_ref)
         if credential is None:
             raise ValueError(f"credential {node.credential_ref} is not defined")
-        config = credential.config
+        config = {**credential.config, **config}
         env_vars = credential.env_vars
     if env_vars:
         config = _interpolate_config(config, env_vars)
