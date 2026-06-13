@@ -1,14 +1,41 @@
 import Editor from "@monaco-editor/react";
-import type { ConnectorDescriptor, Credential, GraphNode } from "./types";
+import { useEffect, useMemo, useState } from "react";
+import { api } from "./api";
+import type { ConnectorDescriptor, Credential, DebugResult, GraphNode } from "./types";
 
 type PropertyPanelProps = {
   node: GraphNode | null;
   connector: ConnectorDescriptor | null;
   credentials: Credential[];
+  upstreamSample: unknown;
   onChange: (node: GraphNode) => void;
+  onDebugSample: (nodeId: string, sample: unknown) => void;
 };
 
-export function PropertyPanel({ node, connector, credentials, onChange }: PropertyPanelProps) {
+export function PropertyPanel({
+  node,
+  connector,
+  credentials,
+  upstreamSample,
+  onChange,
+  onDebugSample
+}: PropertyPanelProps) {
+  const [connectionResult, setConnectionResult] = useState<DebugResult | null>(null);
+  const [sampleResult, setSampleResult] = useState<DebugResult | null>(null);
+  const [handlerResult, setHandlerResult] = useState<DebugResult | null>(null);
+  const [handlerPayload, setHandlerPayload] = useState("{}");
+  const [debugBusy, setDebugBusy] = useState<string | null>(null);
+
+  const payloadSeed = useMemo(() => samplePayload(upstreamSample), [upstreamSample]);
+
+  useEffect(() => {
+    setConnectionResult(null);
+    setSampleResult(null);
+    setHandlerResult(null);
+    setDebugBusy(null);
+    setHandlerPayload(JSON.stringify(payloadSeed ?? defaultPayload(), null, 2));
+  }, [node?.id, payloadSeed]);
+
   if (!node || !connector) {
     return (
       <aside className="property-panel empty-panel">
@@ -51,6 +78,48 @@ export function PropertyPanel({ node, connector, credentials, onChange }: Proper
     activeConnector.credential_type ? credential.connector_type === activeConnector.credential_type : true
   );
 
+  async function testConnection() {
+    setDebugBusy("connection");
+    try {
+      setConnectionResult(await api.testConnection(activeNode));
+    } catch (error) {
+      setConnectionResult(errorResult(error));
+    } finally {
+      setDebugBusy(null);
+    }
+  }
+
+  async function fetchSample() {
+    setDebugBusy("sample");
+    try {
+      const result = await api.fetchSample(activeNode, 5);
+      setSampleResult(result);
+      if (result.status === "ok") {
+        onDebugSample(activeNode.id, result.data);
+      }
+    } catch (error) {
+      setSampleResult(errorResult(error));
+    } finally {
+      setDebugBusy(null);
+    }
+  }
+
+  async function runHandler() {
+    setDebugBusy("handler");
+    try {
+      const parsed = JSON.parse(handlerPayload);
+      const result = await api.runHandler(activeNode, parsed);
+      setHandlerResult(result);
+      if (result.status === "ok") {
+        onDebugSample(activeNode.id, result.data);
+      }
+    } catch (error) {
+      setHandlerResult(errorResult(error));
+    } finally {
+      setDebugBusy(null);
+    }
+  }
+
   return (
     <aside className="property-panel">
       <div className="panel-heading">
@@ -87,6 +156,13 @@ export function PropertyPanel({ node, connector, credentials, onChange }: Proper
               />
             </label>
           ))}
+          <DebugActions
+            busy={debugBusy}
+            connectionResult={connectionResult}
+            onFetchSample={fetchSample}
+            onTestConnection={testConnection}
+            sampleResult={sampleResult}
+          />
         </section>
       ) : (
         <section className="property-section">
@@ -131,8 +207,123 @@ export function PropertyPanel({ node, connector, credentials, onChange }: Proper
               />
             </label>
           )}
+          <div className="debug-panel">
+            <div className="debug-heading">
+              <h3>Handler Debug</h3>
+              <button disabled={debugBusy === "handler"} onClick={runHandler} type="button">
+                {debugBusy === "handler" ? "Running" : "Run Handler"}
+              </button>
+            </div>
+            <label className="field">
+              <span>Input Payload</span>
+              <textarea
+                onChange={(event) => setHandlerPayload(event.target.value)}
+                rows={8}
+                value={handlerPayload}
+              />
+            </label>
+            <DebugResultView result={handlerResult} />
+          </div>
         </section>
       )}
     </aside>
   );
+}
+
+function DebugActions({
+  busy,
+  connectionResult,
+  sampleResult,
+  onTestConnection,
+  onFetchSample
+}: {
+  busy: string | null;
+  connectionResult: DebugResult | null;
+  sampleResult: DebugResult | null;
+  onTestConnection: () => void;
+  onFetchSample: () => void;
+}) {
+  return (
+    <div className="debug-panel">
+      <div className="debug-heading">
+        <h3>Debug</h3>
+        <div className="debug-actions">
+          <button disabled={busy === "connection"} onClick={onTestConnection} type="button">
+            {busy === "connection" ? "Testing" : "Test Connection"}
+          </button>
+          <button disabled={busy === "sample"} onClick={onFetchSample} type="button">
+            {busy === "sample" ? "Fetching" : "Fetch Sample"}
+          </button>
+        </div>
+      </div>
+      <DebugResultView result={connectionResult} />
+      <DebugResultView result={sampleResult} />
+    </div>
+  );
+}
+
+function DebugResultView({ result }: { result: DebugResult | null }) {
+  if (!result) {
+    return null;
+  }
+  return (
+    <div className={`debug-result ${result.status}`}>
+      <div className="debug-result-meta">
+        <strong>{result.status}</strong>
+        <span>{result.duration_ms} ms</span>
+      </div>
+      <p>{result.message}</p>
+      {result.stdout ? (
+        <details open>
+          <summary>stdout</summary>
+          <pre>{result.stdout}</pre>
+        </details>
+      ) : null}
+      {result.stderr ? (
+        <details open>
+          <summary>stderr</summary>
+          <pre>{result.stderr}</pre>
+        </details>
+      ) : null}
+      {result.data !== null && result.data !== undefined ? (
+        <details open>
+          <summary>data</summary>
+          <pre>{stringify(result.data)}</pre>
+        </details>
+      ) : null}
+      {result.schema !== null && result.schema !== undefined ? (
+        <details open>
+          <summary>schema</summary>
+          <pre>{stringify(result.schema)}</pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function samplePayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return value ?? null;
+}
+
+function defaultPayload(): Record<string, unknown> {
+  return { order_id: "A001", amount: 99.5, status: "new" };
+}
+
+function errorResult(error: unknown): DebugResult {
+  return {
+    status: "error",
+    message: error instanceof Error ? error.message : String(error),
+    data: null,
+    schema: null,
+    stdout: "",
+    stderr: "",
+    duration_ms: 0
+  };
+}
+
+function stringify(value: unknown): string {
+  return JSON.stringify(value, null, 2);
 }

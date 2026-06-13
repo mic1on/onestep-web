@@ -388,6 +388,85 @@ button:hover,
   overflow: hidden;
 }
 
+.debug-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.debug-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.debug-result {
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.debug-result.ok {
+  border-left: 4px solid var(--green);
+}
+
+.debug-result.error {
+  border-left: 4px solid var(--accent-2);
+}
+
+.debug-result.unsupported {
+  border-left: 4px solid var(--amber);
+}
+
+.debug-result-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.debug-result-meta span {
+  color: var(--muted);
+}
+
+.debug-result p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.debug-result summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.debug-result pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding: 8px;
+  background: #f5f6ef;
+  border: 1px solid var(--line);
+  font-family: "SF Mono", "Cascadia Code", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .lower-grid {
   display: grid;
   grid-template-columns: minmax(520px, 1fr) minmax(420px, 0.9fr);

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
@@ -63,5 +63,13 @@ describe("App", () => {
     expect(await screen.findByText("RabbitMQ Source")).toBeInTheDocument();
     expect(await screen.findByText("Global credentials")).toBeInTheDocument();
   });
-});
 
+  it("shows node debug controls when a connector is selected", async () => {
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("RabbitMQ Source"));
+
+    expect(await screen.findByText("Test Connection")).toBeInTheDocument();
+    expect(await screen.findByText("Fetch Sample")).toBeInTheDocument();
+  });
+});

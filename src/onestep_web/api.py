@@ -15,6 +15,7 @@ from onestep_web.compiler import PipelineCompileError
 from onestep_web.connectors import CONNECTORS
 from onestep_web.credentials import CredentialCipher, load_or_create_cipher, mask_env_vars
 from onestep_web.db import Database, database
+from onestep_web.debug import PipelineDebugger, build_debug_credentials
 from onestep_web.exporter import WorkerExporter
 from onestep_web.models import Credential, Pipeline, PipelineLog, utcnow
 from onestep_web.runtime import PipelineRuntimePool
@@ -24,6 +25,9 @@ from onestep_web.schemas import (
     CredentialList,
     CredentialRead,
     CredentialUpdate,
+    DebugHandlerRequest,
+    DebugNodeRequest,
+    DebugResult,
     PipelineCreate,
     PipelineGraph,
     PipelineList,
@@ -40,6 +44,7 @@ class AppState:
         self.cipher: CredentialCipher = load_or_create_cipher(db.settings)
         self.runtime = PipelineRuntimePool()
         self.exporter = WorkerExporter()
+        self.debugger = PipelineDebugger()
         self.log_subscribers: dict[str, set[asyncio.Queue[PipelineLogRead]]] = defaultdict(set)
 
 
@@ -67,6 +72,36 @@ def create_api(db: Database | None = None) -> FastAPI:
     @router.get("/connectors", response_model=ConnectorList)
     async def list_connectors() -> ConnectorList:
         return ConnectorList(items=CONNECTORS)
+
+    @router.post("/debug/nodes/test-connection", response_model=DebugResult)
+    async def debug_test_connection(
+        request: DebugNodeRequest,
+        session: AsyncSession = Depends(session_dep),
+        state: AppState = Depends(app_state),
+    ) -> DebugResult:
+        return await state.debugger.test_connection(
+            request.node,
+            build_debug_credentials(await _credential_map(session, state)),
+        )
+
+    @router.post("/debug/nodes/fetch-sample", response_model=DebugResult)
+    async def debug_fetch_sample(
+        request: DebugNodeRequest,
+        session: AsyncSession = Depends(session_dep),
+        state: AppState = Depends(app_state),
+    ) -> DebugResult:
+        return await state.debugger.fetch_sample(
+            request.node,
+            build_debug_credentials(await _credential_map(session, state)),
+            sample_limit=request.sample_limit,
+        )
+
+    @router.post("/debug/handlers/run", response_model=DebugResult)
+    async def debug_run_handler(
+        request: DebugHandlerRequest,
+        state: AppState = Depends(app_state),
+    ) -> DebugResult:
+        return await state.debugger.run_handler(request.node, request.payload)
 
     @router.get("/pipelines", response_model=PipelineList)
     async def list_pipelines(session: AsyncSession = Depends(session_dep)) -> PipelineList:

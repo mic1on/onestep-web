@@ -1,6 +1,8 @@
 import type {
   ConnectorDescriptor,
   Credential,
+  DebugResult,
+  GraphNode,
   Pipeline,
   PipelineGraph,
   PipelineLog,
@@ -63,6 +65,24 @@ export const api = {
   },
   async listLogs(id: string): Promise<PipelineLog[]> {
     return request<PipelineLog[]>(`/api/pipelines/${id}/logs`);
+  },
+  async testConnection(node: GraphNode): Promise<DebugResult> {
+    return request<DebugResult>("/api/debug/nodes/test-connection", {
+      method: "POST",
+      body: JSON.stringify({ node })
+    });
+  },
+  async fetchSample(node: GraphNode, sampleLimit = 5): Promise<DebugResult> {
+    return request<DebugResult>("/api/debug/nodes/fetch-sample", {
+      method: "POST",
+      body: JSON.stringify({ node, sample_limit: sampleLimit })
+    });
+  },
+  async runHandler(node: GraphNode, payload: unknown): Promise<DebugResult> {
+    return request<DebugResult>("/api/debug/handlers/run", {
+      method: "POST",
+      body: JSON.stringify({ node, payload })
+    });
   },
   async exportPipeline(id: string): Promise<Blob> {
     const response = await fetch(`/api/pipelines/${id}/export`, { method: "POST" });

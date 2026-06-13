@@ -145,3 +145,25 @@ class RuntimeStatus(APIModel):
     status: PipelineStatus
     message: str
 
+
+DebugStatus = Literal["ok", "error", "unsupported"]
+
+
+class DebugNodeRequest(APIModel):
+    node: GraphNode
+    sample_limit: int = Field(default=5, ge=1, le=100)
+
+
+class DebugHandlerRequest(APIModel):
+    node: GraphNode
+    payload: Any = Field(default_factory=dict)
+
+
+class DebugResult(APIModel):
+    status: DebugStatus
+    message: str
+    data: Any = None
+    schema_: Any = Field(default=None, alias="schema")
+    stdout: str = ""
+    stderr: str = ""
+    duration_ms: float = 0

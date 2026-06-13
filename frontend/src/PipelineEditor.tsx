@@ -15,7 +15,7 @@ import {
   type Node,
   type NodeChange
 } from "@xyflow/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { ConnectorDescriptor, Credential, GraphNode, PipelineGraph } from "./types";
 import { NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
@@ -44,6 +44,8 @@ export function PipelineEditor({
     ? connectors.find((connector) => connector.type === selectedNode.type) ?? null
     : null;
   const nodeTypes = useMemo(() => ({ pipelineNode: PipelineFlowNode }), []);
+  const [debugSamples, setDebugSamples] = useState<Record<string, unknown>>({});
+  const upstreamSample = selectedNode ? firstUpstreamSample(selectedNode.id, graph, debugSamples) : null;
 
   function updateFromFlow(nextNodes: Node[], nextEdges: Edge[]) {
     const nextGraph: PipelineGraph = {
@@ -100,6 +102,10 @@ export function PipelineEditor({
     });
   }
 
+  function updateDebugSample(nodeId: string, sample: unknown) {
+    setDebugSamples((current) => ({ ...current, [nodeId]: sample }));
+  }
+
   return (
     <main className="builder-grid">
       <NodePalette connectors={connectors} onAddNode={addConnectorNode} />
@@ -124,10 +130,24 @@ export function PipelineEditor({
         connector={selectedConnector}
         credentials={credentials}
         node={selectedNode}
+        onDebugSample={updateDebugSample}
         onChange={updateNode}
+        upstreamSample={upstreamSample}
       />
     </main>
   );
+}
+
+function firstUpstreamSample(
+  nodeId: string,
+  graph: PipelineGraph,
+  samples: Record<string, unknown>
+): unknown {
+  const upstream = graph.edges.find((edge) => edge.to === nodeId);
+  if (!upstream) {
+    return null;
+  }
+  return samples[upstream.from] ?? null;
 }
 
 function toFlowNode(node: GraphNode): Node {

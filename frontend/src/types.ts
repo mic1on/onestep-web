@@ -76,3 +76,14 @@ export type RuntimeStatus = {
   message: string;
 };
 
+export type DebugStatus = "ok" | "error" | "unsupported";
+
+export type DebugResult = {
+  status: DebugStatus;
+  message: string;
+  data: unknown;
+  schema: unknown;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
+};
