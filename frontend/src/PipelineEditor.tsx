@@ -17,7 +17,7 @@ import {
   type NodeChange
 } from "@xyflow/react";
 import { memo, useCallback, useMemo, useState } from "react";
-import type { ConnectorDescriptor, Credential, GraphNode, PipelineGraph } from "./types";
+import type { ConnectorDescriptor, Credential, GraphEdge, GraphNode, PipelineGraph } from "./types";
 import { NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
 
@@ -69,6 +69,9 @@ export function PipelineEditor({
   const selectedGraphEdge = selectedEdgeId
     ? graph.edges.find((edge) => flowEdgeId(edge) === selectedEdgeId) ?? null
     : null;
+  const selectedGraphEdgeSource = selectedGraphEdge
+    ? graph.nodes.find((node) => node.id === selectedGraphEdge.from) ?? null
+    : null;
 
   const updateFromFlow = useCallback(
     (nextNodes: Node[], nextEdges: Edge[]) => {
@@ -80,11 +83,20 @@ export function PipelineEditor({
             position: node.position
           };
         }),
-        edges: nextEdges.map((edge) => ({ from: String(edge.source), to: String(edge.target) }))
+        edges: nextEdges.map((edge) => {
+          const from = String(edge.source);
+          const to = String(edge.target);
+          const previous = graph.edges.find((item) => item.from === from && item.to === to);
+          return {
+            ...(previous ?? {}),
+            from,
+            to
+          };
+        })
       };
       onGraphChange(nextGraph);
     },
-    [graph.nodes, onGraphChange]
+    [graph.edges, graph.nodes, onGraphChange]
   );
 
   const handleNodesChange = useCallback(
@@ -148,6 +160,21 @@ export function PipelineEditor({
     setSelectedEdgeId(null);
   }, [edges, nodes, selectedEdgeId, updateFromFlow]);
 
+  const updateSelectedEdgeCondition = useCallback((condition: string) => {
+    if (!selectedEdgeId) {
+      return;
+    }
+    const nextCondition = condition.trim() ? condition : null;
+    onGraphChange({
+      ...graph,
+      edges: graph.edges.map((edge) =>
+        flowEdgeId(edge) === selectedEdgeId
+          ? { ...edge, condition: nextCondition }
+          : edge
+      )
+    });
+  }, [graph, onGraphChange, selectedEdgeId]);
+
   const addConnectorNode = useCallback((connector: ConnectorDescriptor) => {
     const count = graph.nodes.length + 1;
     const nextNode = createGraphNode(
@@ -201,6 +228,16 @@ export function PipelineEditor({
               {" -> "}
               {selectedGraphEdge.to}
             </span>
+            {selectedGraphEdgeSource?.kind === "handler" ? (
+              <label className="edge-condition-field">
+                <span>Condition</span>
+                <input
+                  onChange={(event) => updateSelectedEdgeCondition(event.target.value)}
+                  placeholder='status == "paid"'
+                  value={selectedGraphEdge.condition ?? ""}
+                />
+              </label>
+            ) : null}
             <button onClick={deleteSelectedEdge} type="button">
               Delete Connection
             </button>
@@ -341,21 +378,27 @@ function toFlowNode(
   };
 }
 
-function toFlowEdge(edge: { from: string; to: string }, selectedEdgeId: string | null): Edge {
+function toFlowEdge(edge: GraphEdge, selectedEdgeId: string | null): Edge {
   const id = flowEdgeId(edge);
+  const condition = edge.condition?.trim();
   return {
     id,
     source: edge.from,
     target: edge.to,
     type: "smoothstep",
+    label: condition || undefined,
+    labelBgPadding: [8, 4],
+    labelBgBorderRadius: 2,
+    labelBgStyle: { fill: "#fff" },
+    labelStyle: { fontSize: 12, fontWeight: 700 },
     markerEnd: { type: MarkerType.ArrowClosed },
     animated: true,
-    style: { strokeWidth: 2 },
+    style: { strokeDasharray: condition ? "6 4" : undefined, strokeWidth: 2 },
     selected: id === selectedEdgeId
   };
 }
 
-function flowEdgeId(edge: { from: string; to: string }): string {
+function flowEdgeId(edge: Pick<GraphEdge, "from" | "to">): string {
   return `${edge.from}-${edge.to}`;
 }
 

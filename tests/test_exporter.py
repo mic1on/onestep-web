@@ -7,7 +7,7 @@ import yaml
 
 from onestep_web.exporter import WorkerExporter
 from onestep_web.schemas import PipelineGraph
-from helpers import sample_graph
+from helpers import conditional_sink_graph, sample_graph
 
 
 def test_exporter_builds_worker_zip() -> None:
@@ -45,3 +45,23 @@ def test_exporter_builds_worker_zip() -> None:
         assert "onestep[mysql,rabbitmq,yaml]" in requirements
         handlers = archive.read("onestep_worker/src/onestep_worker/handlers.py").decode()
         assert "async def handler_n2" in handlers
+
+
+def test_exporter_includes_conditional_route_predicates() -> None:
+    exported = WorkerExporter().export(
+        "pipe_conditional",
+        "conditional route",
+        PipelineGraph.model_validate(conditional_sink_graph()),
+        credentials={},
+    )
+
+    with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        worker = yaml.safe_load(archive.read("conditional_route/worker.yaml").decode())
+        handler_task = next(task for task in worker["tasks"] if task["name"] == "shape")
+        assert handler_task["emit"][1] == {
+            "when": "conditional_route.handlers:predicate_shape__paid_notify",
+            "then": "edge_shape__paid_notify",
+        }
+        handlers = archive.read("conditional_route/src/conditional_route/handlers.py").decode()
+        assert "def predicate_shape__paid_notify" in handlers
+        assert "result['status'] == 'paid'" in handlers

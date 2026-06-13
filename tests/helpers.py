@@ -76,3 +76,25 @@ def scheduled_http_graph() -> dict:
             {"from": "shape", "to": "notify"},
         ],
     }
+
+
+def conditional_sink_graph() -> dict:
+    graph = scheduled_http_graph()
+    graph["nodes"][1]["mapping"] = {
+        "source": "{{source}}",
+        "status": "{{status}}",
+    }
+    graph["nodes"].append(
+        {
+            "id": "paid_notify",
+            "type": "http_sink",
+            "kind": "sink",
+            "config": {
+                "url": "https://example.com/paid-orders",
+                "method": "POST",
+            },
+            "position": {"x": 720, "y": 300},
+        }
+    )
+    graph["edges"].append({"from": "shape", "to": "paid_notify", "condition": 'status == "paid"'})
+    return graph

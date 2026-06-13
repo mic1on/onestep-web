@@ -4,7 +4,7 @@ import pytest
 
 from onestep_web.compiler import PipelineCompileError, PipelineCompiler
 from onestep_web.schemas import PipelineGraph
-from helpers import sample_graph
+from helpers import conditional_sink_graph, sample_graph
 
 
 def test_compiler_orders_valid_dag() -> None:
@@ -16,6 +16,26 @@ def test_compiler_orders_valid_dag() -> None:
 
     assert compiled.order == ["n1", "n2", "n3"]
     assert "payload['amount'] * 1.1" in compiled.generated_handlers["n2"]
+
+
+def test_compiler_generates_conditional_edge_predicates() -> None:
+    graph = PipelineGraph.model_validate(conditional_sink_graph())
+    compiled = PipelineCompiler().compile(
+        graph,
+        credentials={},
+    )
+
+    assert "predicate_shape__paid_notify" in compiled.generated_predicates
+    assert "result['status'] == 'paid'" in compiled.generated_predicates["predicate_shape__paid_notify"]
+
+
+def test_compiler_rejects_conditional_edges_before_handler_result() -> None:
+    raw = sample_graph()
+    raw["edges"][0]["condition"] = 'status == "paid"'
+    graph = PipelineGraph.model_validate(raw)
+
+    with pytest.raises(PipelineCompileError, match="conditional edges must start from a handler node"):
+        PipelineCompiler().compile(graph, credentials={"PROD_RABBITMQ": {}, "PROD_MYSQL": {}})
 
 
 def test_compiler_rejects_cycles() -> None:

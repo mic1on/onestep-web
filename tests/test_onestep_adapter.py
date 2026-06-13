@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from onestep.config import validate_app_config
 
-from helpers import sample_graph, scheduled_http_graph
+from helpers import conditional_sink_graph, sample_graph, scheduled_http_graph
 from onestep_web.onestep_adapter import build_onestep_config, build_runtime_app
 from onestep_web.schemas import PipelineGraph
 
@@ -53,6 +53,26 @@ def test_build_onestep_config_is_strict_valid_for_builtin_resources() -> None:
         runtime=False,
     )
 
+    validate_app_config(config)
+
+
+def test_build_onestep_config_maps_conditional_handler_edges() -> None:
+    config = build_onestep_config(
+        "conditional route",
+        PipelineGraph.model_validate(conditional_sink_graph()),
+        handler_module="worker.handlers",
+        credentials={},
+        runtime=False,
+    )
+
+    handler_task = next(task for task in config["tasks"] if task["name"] == "shape")
+    assert handler_task["emit"] == [
+        "edge_shape__notify",
+        {
+            "when": "worker.handlers:predicate_shape__paid_notify",
+            "then": "edge_shape__paid_notify",
+        },
+    ]
     validate_app_config(config)
 
 
@@ -133,5 +153,27 @@ async def test_build_runtime_app_returns_real_onestep_app() -> None:
         assert described["name"] == "scheduled_notify"
         assert {task["name"] for task in described["tasks"]} == {"tick", "shape", "notify"}
         assert any(resource["key"] == "edge_tick__shape" for resource in described["resources"])
+    finally:
+        assert module_name.startswith("onestep_web._runtime_handlers_")
+
+
+async def test_build_runtime_app_loads_conditional_predicates() -> None:
+    async def log(event_kind: str, task_name: str, message: str) -> None:
+        _ = (event_kind, task_name, message)
+
+    app, module_name = build_runtime_app(
+        "pipe_conditional",
+        "conditional route",
+        PipelineGraph.model_validate(conditional_sink_graph()),
+        credentials={},
+        log=log,
+    )
+
+    try:
+        task = next(task for task in app.tasks if task.name == "shape")
+        conditional_route = task.emit_routes[1]
+        assert conditional_route.predicate_ref == f"{module_name}:predicate_shape__paid_notify"
+        assert conditional_route.predicate(None, {}, {"status": "paid"}) is True
+        assert conditional_route.predicate(None, {}, {"status": "new"}) is False
     finally:
         assert module_name.startswith("onestep_web._runtime_handlers_")

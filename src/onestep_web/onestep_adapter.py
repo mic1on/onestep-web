@@ -10,7 +10,7 @@ from typing import Any
 from onestep import OneStepApp
 from onestep.config import load_app_config
 
-from onestep_web.compiler import PipelineCompiler, PipelineCompileError
+from onestep_web.compiler import PipelineCompiler, PipelineCompileError, predicate_name
 from onestep_web.credentials import ENV_VAR_PATTERN, interpolate_env_vars
 from onestep_web.schemas import GraphEdge, GraphNode, PipelineGraph
 
@@ -28,7 +28,7 @@ def build_runtime_app(
     compiler = PipelineCompiler()
     compiled = compiler.compile(graph, credentials)
     module_name = f"onestep_web._runtime_handlers_{_safe_key(pipeline_id)}"
-    _install_handler_module(module_name, compiled.generated_handlers)
+    _install_handler_module(module_name, compiled.generated_handlers, compiled.generated_predicates)
     config = build_onestep_config(
         pipeline_name,
         graph,
@@ -107,7 +107,11 @@ def build_requirements(graph: PipelineGraph) -> list[str]:
     return [f"onestep[{','.join(sorted(extras))}]", *sorted(packages)]
 
 
-def _install_handler_module(module_name: str, handlers: Mapping[str, str]) -> None:
+def _install_handler_module(
+    module_name: str,
+    handlers: Mapping[str, str],
+    predicates: Mapping[str, str],
+) -> None:
     module = types.ModuleType(module_name)
     for node_id, code in handlers.items():
         namespace: dict[str, Any] = {"__builtins__": __builtins__}
@@ -119,6 +123,16 @@ def _install_handler_module(module_name: str, handlers: Mapping[str, str]) -> No
         if not callable(handler):
             raise PipelineCompileError(f"handler node {node_id} must define handler(ctx, payload)")
         setattr(module, _handler_name(node_id), handler)
+    for name, code in predicates.items():
+        namespace = {"__builtins__": __builtins__}
+        try:
+            exec(compile(code, f"<onestep-web:{name}>", "exec"), namespace)
+        except Exception as exc:
+            raise PipelineCompileError(f"predicate {name} could not be loaded: {exc}") from exc
+        predicate = namespace.get(name)
+        if not callable(predicate):
+            raise PipelineCompileError(f"predicate {name} must define {name}(ctx, payload, result)")
+        setattr(module, name, predicate)
     sys.modules[module_name] = module
 
 
@@ -383,7 +397,7 @@ def _tasks_for_graph(graph: PipelineGraph, handler_module: str) -> list[dict[str
             }
             if kind == "handler":
                 task["handler"] = {"ref": f"{handler_module}:{_handler_name(node.id)}"}
-                emits = [_edge_resource(out_edge) for out_edge in outgoing[node.id]]
+                emits = [_emit_entry(out_edge, handler_module) for out_edge in outgoing[node.id]]
                 if emits:
                     task["emit"] = emits
             else:
@@ -517,6 +531,16 @@ def _node_resource(node: GraphNode) -> str:
 
 def _edge_resource(edge: GraphEdge) -> str:
     return f"edge_{_safe_key(edge.from_)}__{_safe_key(edge.to)}"
+
+
+def _emit_entry(edge: GraphEdge, handler_module: str) -> str | dict[str, Any]:
+    condition = edge.condition.strip() if edge.condition else ""
+    if not condition:
+        return _edge_resource(edge)
+    return {
+        "when": f"{handler_module}:{predicate_name(edge)}",
+        "then": _edge_resource(edge),
+    }
 
 
 def _handler_name(node_id: str) -> str:

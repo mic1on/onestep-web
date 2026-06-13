@@ -330,12 +330,31 @@ button:active,
 .canvas-edge-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   border-left-color: var(--accent);
 }
 
 .canvas-edge-toolbar button {
   min-height: 28px;
+}
+
+.edge-condition-field {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 260px);
+  align-items: center;
+  gap: 6px;
+}
+
+.edge-condition-field span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.edge-condition-field input {
+  min-height: 28px;
+  padding: 4px 8px;
 }
 
 .react-flow__node-default {

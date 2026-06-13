@@ -43,6 +43,7 @@ class GraphNode(APIModel):
 class GraphEdge(APIModel):
     from_: str = Field(alias="from", min_length=1)
     to: str = Field(min_length=1)
+    condition: str | None = None
 
 
 class PipelineGraph(APIModel):

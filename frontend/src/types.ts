@@ -18,6 +18,7 @@ export type GraphNode = {
 export type GraphEdge = {
   from: string;
   to: string;
+  condition?: string | null;
 };
 
 export type PipelineGraph = {

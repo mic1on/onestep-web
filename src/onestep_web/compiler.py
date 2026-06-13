@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from onestep_web.connectors import CONNECTOR_BY_TYPE
-from onestep_web.schemas import GraphNode, PipelineGraph
+from onestep_web.schemas import GraphEdge, GraphNode, PipelineGraph
 
 
 class PipelineCompileError(ValueError):
@@ -19,6 +19,7 @@ class CompiledPipeline:
     graph: PipelineGraph
     order: list[str]
     generated_handlers: dict[str, str]
+    generated_predicates: dict[str, str]
     required_credentials: list[str]
 
 
@@ -32,6 +33,11 @@ class PipelineCompiler:
                 node.id: self.generate_handler_code(node)
                 for node in graph.nodes
                 if (node.kind or self.infer_kind(node)) == "handler"
+            },
+            generated_predicates={
+                predicate_name(edge): self.generate_predicate_code(edge)
+                for edge in graph.edges
+                if _edge_condition(edge)
             },
             required_credentials=sorted(
                 {
@@ -55,6 +61,11 @@ class PipelineCompiler:
                 raise PipelineCompileError(f"edge references missing source node {edge.from_}")
             if edge.to not in nodes:
                 raise PipelineCompileError(f"edge references missing target node {edge.to}")
+            if _edge_condition(edge):
+                source_kind = nodes[edge.from_].kind or self.infer_kind(nodes[edge.from_])
+                if source_kind != "handler":
+                    raise PipelineCompileError("conditional edges must start from a handler node")
+                self._condition_to_python_expression(edge.condition or "")
             outgoing[edge.from_].append(edge.to)
             incoming[edge.to].append(edge.from_)
 
@@ -122,6 +133,16 @@ class PipelineCompiler:
         lines.extend(["    }", ""])
         return "\n".join(lines)
 
+    def generate_predicate_code(self, edge: GraphEdge) -> str:
+        expression = self._condition_to_python_expression(edge.condition or "")
+        return "\n".join(
+            [
+                f"def {predicate_name(edge)}(ctx, payload, result):",
+                f"    return bool({expression})",
+                "",
+            ]
+        )
+
     @staticmethod
     def infer_kind(node: GraphNode) -> str:
         if node.type == "handler":
@@ -162,6 +183,18 @@ class PipelineCompiler:
     def _validate_mapping_expression(self, value: str) -> None:
         self._mapping_to_python_expression(value)
 
+    def _condition_to_python_expression(self, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise PipelineCompileError("conditional edge requires a condition expression")
+        match = re.fullmatch(r"\{\{\s*(.+?)\s*\}\}", stripped)
+        expression = match.group(1) if match else stripped
+        try:
+            ast.parse(expression, mode="eval")
+        except SyntaxError as exc:
+            raise PipelineCompileError(f"conditional edge has invalid expression: {exc.msg}") from exc
+        return _rewrite_result_names(expression)
+
     @staticmethod
     def _mapping_to_python_expression(value: str) -> str:
         stripped = value.strip()
@@ -174,15 +207,23 @@ class PipelineCompiler:
 
 
 def _rewrite_payload_names(expression: str) -> str:
+    return _rewrite_names(expression, "payload")
+
+
+def _rewrite_result_names(expression: str) -> str:
+    return _rewrite_names(expression, "result")
+
+
+def _rewrite_names(expression: str, root_name: str) -> str:
     parsed = ast.parse(expression, mode="eval")
 
     class RewriteNames(ast.NodeTransformer):
         def visit_Name(self, node: ast.Name) -> ast.AST:
-            if node.id in {"True", "False", "None"}:
+            if node.id in {"True", "False", "None", "ctx", "payload", "result"}:
                 return node
             return ast.copy_location(
                 ast.Subscript(
-                    value=ast.Name(id="payload", ctx=ast.Load()),
+                    value=ast.Name(id=root_name, ctx=ast.Load()),
                     slice=ast.Constant(value=node.id),
                     ctx=node.ctx,
                 ),
@@ -193,3 +234,16 @@ def _rewrite_payload_names(expression: str) -> str:
     ast.fix_missing_locations(rewritten)
     return ast.unparse(rewritten.body)
 
+
+def predicate_name(edge: GraphEdge) -> str:
+    return f"predicate_{_safe_key(edge.from_)}__{_safe_key(edge.to)}"
+
+
+def _edge_condition(edge: GraphEdge) -> str | None:
+    condition = edge.condition.strip() if edge.condition else ""
+    return condition or None
+
+
+def _safe_key(value: str) -> str:
+    key = re.sub(r"[^0-9A-Za-z_]+", "_", value.strip()).strip("_")
+    return key or "resource"

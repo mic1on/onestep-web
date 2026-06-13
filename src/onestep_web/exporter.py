@@ -46,7 +46,11 @@ class WorkerExporter:
             compiler=self.compiler,
         )
         worker_yaml = yaml.safe_dump(config, allow_unicode=True, sort_keys=False)
-        handlers_py = self._build_handlers(package_name, compiled.generated_handlers)
+        handlers_py = self._build_handlers(
+            package_name,
+            compiled.generated_handlers,
+            compiled.generated_predicates,
+        )
         env_example = build_env_example(config)
         requirements = "\n".join(build_requirements(graph)) + "\n"
 
@@ -61,11 +65,19 @@ class WorkerExporter:
             archive.writestr(root + f"src/{package_name}/handlers.py", handlers_py)
         return ExportedWorker(filename=f"{pipeline_id}.zip", content=buffer.getvalue())
 
-    def _build_handlers(self, package_name: str, handlers: dict[str, str]) -> str:
+    def _build_handlers(
+        self,
+        package_name: str,
+        handlers: dict[str, str],
+        predicates: dict[str, str],
+    ) -> str:
         lines = ["from __future__ import annotations", ""]
         for node_id, code in handlers.items():
             handler_name = _handler_name(node_id)
             code = re.sub(r"async def\s+handler\s*\(", f"async def {handler_name}(", code, count=1)
+            lines.append(code.rstrip())
+            lines.append("")
+        for code in predicates.values():
             lines.append(code.rstrip())
             lines.append("")
         return "\n".join(lines)
