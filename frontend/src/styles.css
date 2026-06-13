@@ -535,6 +535,40 @@ button:hover,
   grid-column: span 1;
 }
 
+.env-var-editor {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.env-var-heading,
+.env-var-row {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.env-var-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.env-var-heading button {
+  grid-column: 3;
+}
+
+.env-var-row input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  min-height: 36px;
+  padding: 8px;
+}
+
 .log-list {
   max-height: 220px;
   overflow: auto;

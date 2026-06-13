@@ -7,6 +7,7 @@ import io
 import json
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -385,6 +386,8 @@ def _connection_config(
             raise ValueError(f"credential {node.credential_ref} is not defined")
         config = credential.config
         env_vars = credential.env_vars
+    if env_vars:
+        config = _interpolate_config(config, env_vars)
     return config, env_vars
 
 
@@ -454,6 +457,16 @@ def _parse_json_config(value: Any) -> Any:
         return json.loads(stripped)
     except json.JSONDecodeError:
         return value
+
+
+def _interpolate_config(value: Any, env_vars: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        return interpolate_env_vars(value, env_vars)
+    if isinstance(value, Mapping):
+        return {key: _interpolate_config(item, env_vars) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_interpolate_config(item, env_vars) for item in value]
+    return value
 
 
 def _async_mysql_dsn(dsn: str) -> str:

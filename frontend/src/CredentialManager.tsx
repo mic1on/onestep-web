@@ -12,7 +12,12 @@ type CredentialUpdateInput = {
   name: string;
   connector_type: string;
   config: Record<string, unknown>;
-  env_vars?: Record<string, string>;
+  env_vars: Record<string, string>;
+};
+
+type EnvVarRow = {
+  key: string;
+  value: string;
 };
 
 type CredentialManagerProps = {
@@ -27,7 +32,7 @@ export function CredentialManager({ credentials, onCreate, onUpdate, onDelete }:
   const [name, setName] = useState("PROD_RABBITMQ");
   const [connectorType, setConnectorType] = useState("rabbitmq");
   const [url, setUrl] = useState("amqp://user:${PASSWORD}@host:5672/");
-  const [password, setPassword] = useState("");
+  const [envRows, setEnvRows] = useState<EnvVarRow[]>([{ key: "PASSWORD", value: "" }]);
   const [regionName, setRegionName] = useState("us-east-1");
   const [accessKeyId, setAccessKeyId] = useState("");
   const [secretAccessKey, setSecretAccessKey] = useState("");
@@ -41,7 +46,7 @@ export function CredentialManager({ credentials, onCreate, onUpdate, onDelete }:
       name,
       connector_type: connectorType,
       url,
-      password,
+      envRows,
       regionName,
       accessKeyId,
       secretAccessKey,
@@ -64,7 +69,7 @@ export function CredentialManager({ credentials, onCreate, onUpdate, onDelete }:
     setName(credential.name);
     setConnectorType(credential.connector_type);
     setUrl(stringValue(config.url ?? config.dsn) || "amqp://user:${PASSWORD}@host:5672/");
-    setPassword("");
+    setEnvRows(envRowsFromCredential(credential));
     setRegionName(stringValue(config.region_name) || "us-east-1");
     setAccessKeyId(stringValue(options.aws_access_key_id));
     setSecretAccessKey(stringValue(options.aws_secret_access_key));
@@ -78,13 +83,23 @@ export function CredentialManager({ credentials, onCreate, onUpdate, onDelete }:
     setName("PROD_RABBITMQ");
     setConnectorType("rabbitmq");
     setUrl("amqp://user:${PASSWORD}@host:5672/");
-    setPassword("");
+    setEnvRows([{ key: "PASSWORD", value: "" }]);
     setRegionName("us-east-1");
     setAccessKeyId("");
     setSecretAccessKey("");
     setSessionToken("");
     setAppId("");
     setAppSecret("");
+  }
+
+  function updateEnvRow(index: number, patch: Partial<EnvVarRow>) {
+    setEnvRows((current) =>
+      current.map((row, currentIndex) => (currentIndex === index ? { ...row, ...patch } : row))
+    );
+  }
+
+  function removeEnvRow(index: number) {
+    setEnvRows((current) => current.filter((_, currentIndex) => currentIndex !== index));
   }
 
   return (
@@ -165,12 +180,36 @@ export function CredentialManager({ credentials, onCreate, onUpdate, onDelete }:
               <span>URL / DSN</span>
               <input onChange={(event) => setUrl(event.target.value)} value={url} />
             </label>
-            <label className="field">
-              <span>PASSWORD</span>
-              <input onChange={(event) => setPassword(event.target.value)} type="password" value={password} />
-            </label>
           </>
         )}
+        <div className="env-var-editor">
+          <div className="env-var-heading">
+            <span>Environment variables</span>
+            <button onClick={() => setEnvRows([...envRows, { key: "", value: "" }])} type="button">
+              Add Env Var
+            </button>
+          </div>
+          {envRows.map((row, index) => (
+            <div className="env-var-row" key={index}>
+              <input
+                aria-label={`Env key ${index + 1}`}
+                onChange={(event) => updateEnvRow(index, { key: event.target.value })}
+                placeholder="NAME"
+                value={row.key}
+              />
+              <input
+                aria-label={`Env value ${index + 1}`}
+                onChange={(event) => updateEnvRow(index, { value: event.target.value })}
+                placeholder={editingId ? "leave masked value to keep existing" : "value"}
+                type="password"
+                value={row.value}
+              />
+              <button onClick={() => removeEnvRow(index)} type="button">
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
         <button className="primary-button" type="submit">
           {editingId ? "Update Credential" : "Add Credential"}
         </button>
@@ -188,7 +227,7 @@ function buildCredentialInput(input: {
   name: string;
   connector_type: string;
   url: string;
-  password: string;
+  envRows: EnvVarRow[];
   regionName: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -196,6 +235,7 @@ function buildCredentialInput(input: {
   appId: string;
   appSecret: string;
 }): { create: CredentialCreateInput; update: CredentialUpdateInput } {
+  const env_vars = collectEnvVars(input.envRows);
   if (input.connector_type === "sqs") {
     const options: Record<string, string> = {};
     if (input.accessKeyId) {
@@ -214,7 +254,7 @@ function buildCredentialInput(input: {
         region_name: input.regionName,
         ...(Object.keys(options).length ? { options } : {})
       },
-      env_vars: {}
+      env_vars
     };
     return { create: payload, update: payload };
   }
@@ -223,7 +263,7 @@ function buildCredentialInput(input: {
       name: input.name,
       connector_type: input.connector_type,
       config: { app_id: input.appId, app_secret: input.appSecret },
-      env_vars: {}
+      env_vars
     };
     return { create: payload, update: payload };
   }
@@ -231,17 +271,31 @@ function buildCredentialInput(input: {
     name: input.name,
     connector_type: input.connector_type,
     config: { url: input.url },
-    env_vars: input.password ? { PASSWORD: input.password } : {}
+    env_vars
   };
   const update: CredentialUpdateInput = {
     name: input.name,
     connector_type: input.connector_type,
-    config: { url: input.url }
+    config: { url: input.url },
+    env_vars
   };
-  if (input.password) {
-    update.env_vars = { PASSWORD: input.password };
-  }
   return { create, update };
+}
+
+function collectEnvVars(rows: EnvVarRow[]): Record<string, string> {
+  const envVars: Record<string, string> = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    if (key) {
+      envVars[key] = row.value;
+    }
+  }
+  return envVars;
+}
+
+function envRowsFromCredential(credential: Credential): EnvVarRow[] {
+  const rows = Object.entries(credential.env_vars).map(([key, value]) => ({ key, value }));
+  return rows.length ? rows : [{ key: "", value: "" }];
 }
 
 function stringValue(value: unknown): string {

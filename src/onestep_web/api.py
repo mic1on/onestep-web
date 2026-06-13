@@ -13,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from onestep_web.compiler import PipelineCompileError
 from onestep_web.connectors import CONNECTORS
-from onestep_web.credentials import CredentialCipher, load_or_create_cipher, mask_env_vars
+from onestep_web.credentials import (
+    CredentialCipher,
+    load_or_create_cipher,
+    mask_env_vars,
+    merge_masked_env_vars,
+)
 from onestep_web.db import Database, database
 from onestep_web.debug import PipelineDebugger, build_debug_credentials
 from onestep_web.exporter import WorkerExporter
@@ -264,7 +269,11 @@ def create_api(db: Database | None = None) -> FastAPI:
         if request.config is not None:
             credential.config_encrypted = state.cipher.encrypt_json(request.config)
         if request.env_vars is not None:
-            credential.env_vars_encrypted = state.cipher.encrypt_json(request.env_vars)
+            existing_env_vars = state.cipher.decrypt_json(credential.env_vars_encrypted)
+            existing_env_vars = {str(key): str(value) for key, value in existing_env_vars.items()}
+            credential.env_vars_encrypted = state.cipher.encrypt_json(
+                merge_masked_env_vars(request.env_vars, existing_env_vars)
+            )
         credential.updated_at = utcnow()
         await session.commit()
         await session.refresh(credential)

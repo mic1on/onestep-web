@@ -10,6 +10,7 @@ from onestep_web.settings import Settings
 
 
 ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+MASKED_SECRET = "********"
 
 
 class CredentialCipher:
@@ -43,7 +44,20 @@ def interpolate_env_vars(value: str, env_vars: dict[str, str]) -> str:
 
 
 def mask_env_vars(env_vars: dict[str, str]) -> dict[str, str]:
-    return {key: "********" if value else "" for key, value in env_vars.items()}
+    return {key: MASKED_SECRET if value else "" for key, value in env_vars.items()}
+
+
+def merge_masked_env_vars(
+    incoming: dict[str, str],
+    existing: dict[str, str],
+) -> dict[str, str]:
+    merged: dict[str, str] = {}
+    for key, value in incoming.items():
+        if value == MASKED_SECRET and key in existing:
+            merged[key] = existing[key]
+        else:
+            merged[key] = value
+    return merged
 
 
 def load_or_create_cipher(settings: Settings) -> CredentialCipher:

@@ -104,6 +104,9 @@ describe("App", () => {
 
     fireEvent.click(screen.getByText("Edit"));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "DEV_RABBITMQ" } });
+    fireEvent.click(screen.getByText("Add Env Var"));
+    fireEvent.change(screen.getByLabelText("Env key 2"), { target: { value: "TOKEN" } });
+    fireEvent.change(screen.getByLabelText("Env value 2"), { target: { value: "new-token" } });
     fireEvent.click(screen.getByText("Update Credential"));
 
     await waitFor(() => expect(onUpdate).toHaveBeenCalled());
@@ -112,7 +115,8 @@ describe("App", () => {
       expect.objectContaining({
         name: "DEV_RABBITMQ",
         connector_type: "rabbitmq",
-        config: { url: "amqp://user:${PASSWORD}@host:5672/" }
+        config: { url: "amqp://user:${PASSWORD}@host:5672/" },
+        env_vars: { PASSWORD: "********", TOKEN: "new-token" }
       })
     );
 
