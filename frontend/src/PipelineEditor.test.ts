@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { validateGraphConnection } from "./PipelineEditor";
+import {
+  connectionStateForNode,
+  handlesForNodeKind,
+  nextNodePosition,
+  validateGraphConnection
+} from "./PipelineEditor";
 import type { GraphNode, PipelineGraph } from "./types";
 
 describe("validateGraphConnection", () => {
@@ -45,6 +50,45 @@ describe("validateGraphConnection", () => {
     };
 
     expect(validateGraphConnection(graph, "c", "a")).toBe("This connection would create a cycle.");
+  });
+});
+
+describe("connection affordances", () => {
+  it("exposes only legal handles for each node kind", () => {
+    expect(handlesForNodeKind("source")).toEqual({ source: true, target: false });
+    expect(handlesForNodeKind("handler")).toEqual({ source: true, target: true });
+    expect(handlesForNodeKind("sink")).toEqual({ source: false, target: true });
+  });
+
+  it("marks nodes that still need explicit user connections", () => {
+    const graph = graphWithNodes(source("source"), handler("handler"), sink("sink"));
+
+    expect(connectionStateForNode(graph.nodes[0], graph.edges)).toBe("needs output");
+    expect(connectionStateForNode(graph.nodes[1], graph.edges)).toBe("needs input/output");
+    expect(connectionStateForNode(graph.nodes[2], graph.edges)).toBe("needs input");
+  });
+
+  it("keeps extra sinks unconnected until the user chooses them", () => {
+    const graph: PipelineGraph = {
+      nodes: [source("source"), handler("handler"), sink("mysql"), sink("http")],
+      edges: [
+        { from: "source", to: "handler" },
+        { from: "handler", to: "mysql" }
+      ]
+    };
+
+    expect(connectionStateForNode(graph.nodes[1], graph.edges)).toBeNull();
+    expect(connectionStateForNode(graph.nodes[2], graph.edges)).toBeNull();
+    expect(connectionStateForNode(graph.nodes[3], graph.edges)).toBe("needs input");
+  });
+
+  it("places new nodes in visible non-overlapping rows", () => {
+    expect(nextNodePosition(graphWithNodes(), "source")).toEqual({ x: 80, y: 80 });
+    expect(nextNodePosition(graphWithNodes(source("source")), "handler")).toEqual({ x: 190, y: 170 });
+    expect(nextNodePosition(graphWithNodes(source("source"), handler("handler")), "sink")).toEqual({
+      x: 190,
+      y: 260
+    });
   });
 });
 

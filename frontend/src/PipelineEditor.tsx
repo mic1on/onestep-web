@@ -20,6 +20,18 @@ import type { ConnectorDescriptor, Credential, GraphNode, PipelineGraph } from "
 import { NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
 
+type ConnectionHandles = {
+  source: boolean;
+  target: boolean;
+};
+
+type PipelineNodeData = {
+  label?: string;
+  nodeId?: string;
+  kind?: GraphNode["kind"];
+  connectionState?: string | null;
+};
+
 type PipelineEditorProps = {
   graph: PipelineGraph;
   connectors: ConnectorDescriptor[];
@@ -37,16 +49,20 @@ export function PipelineEditor({
   onGraphChange,
   onSelectedNodeChange
 }: PipelineEditorProps) {
-  const nodes = graph.nodes.map(toFlowNode);
-  const edges = graph.edges.map(toFlowEdge);
+  const [debugSamples, setDebugSamples] = useState<Record<string, unknown>>({});
+  const [connectionError, setConnectionError] = useState("");
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const nodes = graph.nodes.map((node) => toFlowNode(node, graph.edges));
+  const edges = graph.edges.map((edge) => toFlowEdge(edge, selectedEdgeId));
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedConnector = selectedNode
     ? connectors.find((connector) => connector.type === selectedNode.type) ?? null
     : null;
   const nodeTypes = useMemo(() => ({ pipelineNode: PipelineFlowNode }), []);
-  const [debugSamples, setDebugSamples] = useState<Record<string, unknown>>({});
-  const [connectionError, setConnectionError] = useState("");
   const upstreamSample = selectedNode ? firstUpstreamSample(selectedNode.id, graph, debugSamples) : null;
+  const selectedGraphEdge = selectedEdgeId
+    ? graph.edges.find((edge) => flowEdgeId(edge) === selectedEdgeId) ?? null
+    : null;
 
   function updateFromFlow(nextNodes: Node[], nextEdges: Edge[]) {
     const nextGraph: PipelineGraph = {
@@ -67,16 +83,24 @@ export function PipelineEditor({
   }
 
   function handleEdgesChange(changes: EdgeChange[]) {
+    if (
+      selectedEdgeId &&
+      changes.some((change) => "id" in change && change.id === selectedEdgeId && change.type === "remove")
+    ) {
+      setSelectedEdgeId(null);
+    }
     updateFromFlow(nodes, applyEdgeChanges(changes, edges));
   }
 
   function handleConnect(connection: Connection) {
     const error = validateGraphConnection(graph, connection.source, connection.target);
     if (error) {
+      setSelectedEdgeId(null);
       setConnectionError(error);
       return;
     }
     setConnectionError("");
+    setSelectedEdgeId(null);
     updateFromFlow(
       nodes,
       addEdge(
@@ -90,15 +114,28 @@ export function PipelineEditor({
     );
   }
 
+  function deleteSelectedEdge() {
+    if (!selectedEdgeId) {
+      return;
+    }
+    updateFromFlow(
+      nodes,
+      edges.filter((edge) => edge.id !== selectedEdgeId)
+    );
+    setSelectedEdgeId(null);
+  }
+
   function addConnectorNode(connector: ConnectorDescriptor) {
     const count = graph.nodes.length + 1;
     const nextNode = createGraphNode(
       `n${count}`,
       connector.type,
       connector.category,
-      { x: 120 + count * 80, y: 140 + count * 22 }
+      nextNodePosition(graph, connector.category)
     );
     onGraphChange({ ...graph, nodes: [...graph.nodes, nextNode] });
+    setConnectionError("");
+    setSelectedEdgeId(null);
     onSelectedNodeChange(nextNode.id);
   }
 
@@ -118,6 +155,18 @@ export function PipelineEditor({
       <NodePalette connectors={connectors} onAddNode={addConnectorNode} />
       <section className="canvas-shell" aria-label="Pipeline canvas">
         {connectionError ? <div className="canvas-alert">{connectionError}</div> : null}
+        {selectedGraphEdge ? (
+          <div className="canvas-alert canvas-edge-toolbar">
+            <span>
+              Connection {selectedGraphEdge.from}
+              {" -> "}
+              {selectedGraphEdge.to}
+            </span>
+            <button onClick={deleteSelectedEdge} type="button">
+              Delete Connection
+            </button>
+          </div>
+        ) : null}
         <ReactFlow
           edges={edges}
           fitView
@@ -125,9 +174,20 @@ export function PipelineEditor({
           nodes={nodes}
           onConnect={handleConnect}
           onEdgesChange={handleEdgesChange}
-          onNodeClick={(_, node) => onSelectedNodeChange(String(node.id))}
+          onEdgeClick={(_, edge) => {
+            setConnectionError("");
+            setSelectedEdgeId(String(edge.id));
+            onSelectedNodeChange(null);
+          }}
+          onNodeClick={(_, node) => {
+            setSelectedEdgeId(null);
+            onSelectedNodeChange(String(node.id));
+          }}
           onNodesChange={handleNodesChange}
-          onPaneClick={() => onSelectedNodeChange(null)}
+          onPaneClick={() => {
+            setSelectedEdgeId(null);
+            onSelectedNodeChange(null);
+          }}
         >
           <Background gap={24} />
           <MiniMap pannable zoomable />
@@ -216,29 +276,45 @@ function firstUpstreamSample(
   return samples[upstream.from] ?? null;
 }
 
-function toFlowNode(node: GraphNode): Node {
+function toFlowNode(node: GraphNode, edges: Array<{ from: string; to: string }>): Node {
+  const connectionState = connectionStateForNode(node, edges);
   return {
     id: node.id,
     position: node.position,
     data: {
       label: node.type,
       nodeId: node.id,
-      kind: node.kind
+      kind: node.kind,
+      connectionState
     },
     type: "pipelineNode",
     width: 220,
     height: 74,
-    style: { width: 220, height: 74 }
+    style: { width: 220, height: 74 },
+    className: connectionState ? "needs-connection" : undefined
   };
 }
 
-function toFlowEdge(edge: { from: string; to: string }): Edge {
+function toFlowEdge(edge: { from: string; to: string }, selectedEdgeId: string | null): Edge {
+  const id = flowEdgeId(edge);
   return {
-    id: `${edge.from}-${edge.to}`,
+    id,
     source: edge.from,
     target: edge.to,
     markerEnd: { type: MarkerType.ArrowClosed },
-    animated: true
+    animated: true,
+    selected: id === selectedEdgeId
+  };
+}
+
+function flowEdgeId(edge: { from: string; to: string }): string {
+  return `${edge.from}-${edge.to}`;
+}
+
+export function nextNodePosition(graph: PipelineGraph, kind: GraphNode["kind"]): { x: number; y: number } {
+  return {
+    x: kind === "source" ? 80 : 190,
+    y: 80 + graph.nodes.length * 90
   };
 }
 
@@ -255,14 +331,50 @@ function createGraphNode(id: string, type: string, kind: GraphNode["kind"], posi
   };
 }
 
-function PipelineFlowNode({ data }: { data: { label?: string; nodeId?: string; kind?: string } }) {
+export function handlesForNodeKind(kind: GraphNode["kind"]): ConnectionHandles {
+  return {
+    source: kind !== "sink",
+    target: kind !== "source"
+  };
+}
+
+export function connectionStateForNode(
+  node: Pick<GraphNode, "id" | "kind">,
+  edges: Array<{ from: string; to: string }>
+): string | null {
+  const hasIncoming = edges.some((edge) => edge.to === node.id);
+  const hasOutgoing = edges.some((edge) => edge.from === node.id);
+
+  if (node.kind === "source") {
+    return hasOutgoing ? null : "needs output";
+  }
+  if (node.kind === "sink") {
+    return hasIncoming ? null : "needs input";
+  }
+  if (!hasIncoming && !hasOutgoing) {
+    return "needs input/output";
+  }
+  if (!hasIncoming) {
+    return "needs input";
+  }
+  if (!hasOutgoing) {
+    return "needs output";
+  }
+  return null;
+}
+
+function PipelineFlowNode({ data }: { data: PipelineNodeData }) {
+  const kind = data.kind ?? "handler";
+  const handles = handlesForNodeKind(kind);
   return (
-    <div className={`pipeline-flow-node ${data.kind ?? "handler"}`}>
-      <Handle type="target" position={Position.Top} />
-      <span>{data.kind}</span>
+    <div className={`pipeline-flow-node ${kind}`}>
+      {handles.target ? <Handle type="target" position={Position.Top} /> : null}
+      <span>{kind}</span>
       <strong>{data.label}</strong>
-      <small>{data.nodeId}</small>
-      <Handle type="source" position={Position.Bottom} />
+      <small className={data.connectionState ? "connection-state" : undefined}>
+        {data.connectionState ?? data.nodeId}
+      </small>
+      {handles.source ? <Handle type="source" position={Position.Bottom} /> : null}
     </div>
   );
 }

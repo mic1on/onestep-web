@@ -88,6 +88,83 @@ describe("App", () => {
     expect(await screen.findByText("Fetch Sample")).toBeInTheDocument();
   });
 
+  it("does not create default edges when nodes are added to the canvas", async () => {
+    let savedGraph: unknown = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/pipelines") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          savedGraph = body.graph;
+          return Response.json({
+            id: "pipe_1",
+            name: body.name,
+            description: body.description,
+            graph: body.graph,
+            status: "draft",
+            created_at: "2026-06-13T00:00:00Z",
+            updated_at: "2026-06-13T00:00:00Z"
+          });
+        }
+        if (url.endsWith("/api/pipelines")) {
+          return Response.json({ items: [] });
+        }
+        if (url.endsWith("/api/connectors")) {
+          return Response.json({
+            items: [
+              {
+                type: "rabbitmq_source",
+                label: "RabbitMQ Source",
+                category: "source",
+                description: "Queue consume",
+                fields: []
+              },
+              {
+                type: "handler",
+                label: "Python Handler",
+                category: "handler",
+                description: "Transform",
+                fields: []
+              },
+              {
+                type: "mysql_sink",
+                label: "MySQL Sink",
+                category: "sink",
+                description: "Write rows",
+                fields: []
+              }
+            ]
+          });
+        }
+        if (url.endsWith("/api/credentials")) {
+          return Response.json({ items: [] });
+        }
+        if (url.includes("/logs")) {
+          return Response.json([]);
+        }
+        return Response.json({});
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("RabbitMQ Source"));
+    fireEvent.click(await screen.findByText("Python Handler"));
+    fireEvent.click(await screen.findByText("MySQL Sink"));
+    fireEvent.click(screen.getByText("Save"));
+
+    await waitFor(() => expect(savedGraph).not.toBeNull());
+    expect(savedGraph).toMatchObject({
+      nodes: [
+        { id: "n1", kind: "source" },
+        { id: "n2", kind: "handler" },
+        { id: "n3", kind: "sink" }
+      ],
+      edges: []
+    });
+  });
+
   it("creates typed MySQL credentials without manually adding env vars", async () => {
     const onCreate = vi.fn();
     const onUpdate = vi.fn();
