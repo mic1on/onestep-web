@@ -404,6 +404,136 @@ button:hover,
   overflow: hidden;
 }
 
+.mapping-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.mapping-pane {
+  border: 1px solid var(--line);
+  background: #fff;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.mapping-pane-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mapping-pane-heading h4 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.mapping-pane-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mapping-field-list,
+.mapping-row-list {
+  display: grid;
+  gap: 6px;
+}
+
+.mapping-field-button {
+  width: 100%;
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px minmax(54px, 82px);
+  gap: 8px;
+  align-items: center;
+  justify-content: stretch;
+  padding: 7px 8px;
+  text-align: left;
+  background: #fbfcf6;
+}
+
+.mapping-field-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.mapping-field-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.mapping-field-type {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.mapping-field-button code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-family: "SF Mono", "Cascadia Code", monospace;
+  font-size: 11px;
+}
+
+.mapping-row {
+  border: 1px solid var(--line);
+  border-left: 4px solid transparent;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) auto;
+  gap: 6px;
+  align-items: end;
+  padding: 8px;
+}
+
+.mapping-row.active {
+  border-left-color: var(--accent);
+  background: #f6f8ff;
+}
+
+.mapping-cell {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.mapping-cell span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mapping-cell input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  padding: 7px;
+  font-family: "SF Mono", "Cascadia Code", monospace;
+  font-size: 12px;
+}
+
+.mapping-remove {
+  min-height: 34px;
+  padding: 0 8px;
+}
+
+.mapping-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .debug-panel {
   border-top: 1px solid var(--line);
   padding-top: 12px;

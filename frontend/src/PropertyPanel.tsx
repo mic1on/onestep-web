@@ -25,8 +25,11 @@ export function PropertyPanel({
   const [handlerResult, setHandlerResult] = useState<DebugResult | null>(null);
   const [handlerPayload, setHandlerPayload] = useState("{}");
   const [debugBusy, setDebugBusy] = useState<string | null>(null);
+  const [selectedMappingKey, setSelectedMappingKey] = useState<string | null>(null);
 
   const payloadSeed = useMemo(() => samplePayload(upstreamSample), [upstreamSample]);
+  const upstreamFields = useMemo(() => collectFieldEntries(payloadSeed), [payloadSeed]);
+  const mappingKeySignature = Object.keys(node?.mapping ?? {}).join("\u0000");
 
   useEffect(() => {
     setConnectionResult(null);
@@ -35,6 +38,11 @@ export function PropertyPanel({
     setDebugBusy(null);
     setHandlerPayload(JSON.stringify(payloadSeed ?? defaultPayload(), null, 2));
   }, [node?.id, payloadSeed]);
+
+  useEffect(() => {
+    const keys = Object.keys(node?.mapping ?? {});
+    setSelectedMappingKey((current) => (current && keys.includes(current) ? current : (keys[0] ?? null)));
+  }, [node?.id, mappingKeySignature]);
 
   if (!node || !connector) {
     return (
@@ -64,24 +72,54 @@ export function PropertyPanel({
     patch({ config });
   }
 
-  function updateMapping(raw: string) {
-    const mapping: Record<string, string> = {};
-    raw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .forEach((line) => {
-        const [key, ...rest] = line.split("=");
-        if (key?.trim()) {
-          mapping[key.trim()] = rest.join("=").trim();
-        }
-      });
+  function addMapping() {
+    const mapping = activeNode.mapping ?? {};
+    let index = 1;
+    let key = `field_${index}`;
+    while (Object.prototype.hasOwnProperty.call(mapping, key)) {
+      index += 1;
+      key = `field_${index}`;
+    }
+    setSelectedMappingKey(key);
+    patch({ mapping: { ...mapping, [key]: "" } });
+  }
+
+  function removeMapping(key: string) {
+    const mapping = { ...(activeNode.mapping ?? {}) };
+    delete mapping[key];
+    setSelectedMappingKey(Object.keys(mapping)[0] ?? null);
     patch({ mapping });
   }
 
-  const mappingText = Object.entries(activeNode.mapping ?? {})
-    .map(([key, value]) => `${key}=${value}`)
-    .join("\n");
+  function renameMappingKey(currentKey: string, nextKey: string) {
+    const trimmed = nextKey.trim();
+    const mapping = activeNode.mapping ?? {};
+    if (!trimmed || trimmed === currentKey || Object.prototype.hasOwnProperty.call(mapping, trimmed)) {
+      return;
+    }
+
+    const nextMapping: Record<string, string> = {};
+    for (const [key, value] of Object.entries(mapping)) {
+      nextMapping[key === currentKey ? trimmed : key] = value;
+    }
+    setSelectedMappingKey(trimmed);
+    patch({ mapping: nextMapping });
+  }
+
+  function updateMappingExpression(key: string, expression: string) {
+    patch({ mapping: { ...(activeNode.mapping ?? {}), [key]: expression } });
+  }
+
+  function insertFieldExpression(expression: string) {
+    const mapping = activeNode.mapping ?? {};
+    const fallbackKey = Object.keys(mapping)[0] ?? "field_1";
+    const key = selectedMappingKey && Object.prototype.hasOwnProperty.call(mapping, selectedMappingKey)
+      ? selectedMappingKey
+      : fallbackKey;
+    setSelectedMappingKey(key);
+    patch({ mapping: { ...mapping, [key]: expression } });
+  }
+
   const matchingCredentials = credentials.filter((credential) =>
     activeConnector.credential_type ? credential.connector_type === activeConnector.credential_type : true
   );
@@ -205,15 +243,17 @@ export function PropertyPanel({
               />
             </div>
           ) : (
-            <label className="field">
-              <span>Mappings</span>
-              <textarea
-                onChange={(event) => updateMapping(event.target.value)}
-                placeholder={"id={{order_id}}\nprice={{amount * 1.1}}"}
-                rows={8}
-                value={mappingText}
-              />
-            </label>
+            <VisualMappingEditor
+              fields={upstreamFields}
+              mapping={activeNode.mapping ?? {}}
+              onAddMapping={addMapping}
+              onInsertField={insertFieldExpression}
+              onRemoveMapping={removeMapping}
+              onRenameMapping={renameMappingKey}
+              onSelectMapping={setSelectedMappingKey}
+              onUpdateExpression={updateMappingExpression}
+              selectedMappingKey={selectedMappingKey}
+            />
           )}
           <div className="debug-panel">
             <div className="debug-heading">
@@ -235,6 +275,124 @@ export function PropertyPanel({
         </section>
       )}
     </aside>
+  );
+}
+
+type FieldEntry = {
+  key: string;
+  label: string;
+  type: string;
+  preview: string;
+  expression: string | null;
+  depth: number;
+};
+
+function VisualMappingEditor({
+  fields,
+  mapping,
+  selectedMappingKey,
+  onAddMapping,
+  onInsertField,
+  onRemoveMapping,
+  onRenameMapping,
+  onSelectMapping,
+  onUpdateExpression
+}: {
+  fields: FieldEntry[];
+  mapping: Record<string, string>;
+  selectedMappingKey: string | null;
+  onAddMapping: () => void;
+  onInsertField: (expression: string) => void;
+  onRemoveMapping: (key: string) => void;
+  onRenameMapping: (currentKey: string, nextKey: string) => void;
+  onSelectMapping: (key: string) => void;
+  onUpdateExpression: (key: string, expression: string) => void;
+}) {
+  const rows = Object.entries(mapping);
+
+  return (
+    <div className="mapping-editor">
+      <section className="mapping-pane" aria-label="Input fields">
+        <div className="mapping-pane-heading">
+          <h4>Input fields</h4>
+          <span>{fields.length}</span>
+        </div>
+        {fields.length ? (
+          <div className="mapping-field-list">
+            {fields.map((field) => (
+              <button
+                aria-label={`Insert ${field.label}`}
+                className="mapping-field-button"
+                disabled={!field.expression}
+                key={field.key}
+                onClick={() => field.expression && onInsertField(field.expression)}
+                type="button"
+              >
+                <span className="mapping-field-name" style={{ paddingLeft: field.depth * 12 }}>
+                  {field.label}
+                </span>
+                <span className="mapping-field-type">{field.type}</span>
+                <code>{field.preview}</code>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mapping-empty">No upstream sample yet.</p>
+        )}
+      </section>
+
+      <section className="mapping-pane" aria-label="Output mappings">
+        <div className="mapping-pane-heading">
+          <h4>Output mappings</h4>
+          <button onClick={onAddMapping} type="button">
+            Add mapping
+          </button>
+        </div>
+        <div className="mapping-row-list">
+          {rows.length ? (
+            rows.map(([key, expression]) => (
+              <div
+                className={`mapping-row ${selectedMappingKey === key ? "active" : ""}`}
+                key={key}
+                onClick={() => onSelectMapping(key)}
+              >
+                <label className="mapping-cell">
+                  <span>Field</span>
+                  <input
+                    aria-label={`Output field ${key}`}
+                    onBlur={(event) => onRenameMapping(key, event.target.value)}
+                    onFocus={() => onSelectMapping(key)}
+                    defaultValue={key}
+                  />
+                </label>
+                <label className="mapping-cell">
+                  <span>Expression</span>
+                  <input
+                    aria-label={`Expression for ${key}`}
+                    onChange={(event) => onUpdateExpression(key, event.target.value)}
+                    onFocus={() => onSelectMapping(key)}
+                    value={expression}
+                  />
+                </label>
+                <button
+                  aria-label={`Remove mapping ${key}`}
+                  className="mapping-remove"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRemoveMapping(key);
+                  }}
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="mapping-empty">No output mappings.</p>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -314,6 +472,100 @@ function samplePayload(value: unknown): unknown {
     return value[0] ?? null;
   }
   return value ?? null;
+}
+
+function collectFieldEntries(value: unknown): FieldEntry[] {
+  const fields: FieldEntry[] = [];
+  collectFields(value, [], fields, 0);
+  return fields.slice(0, 80);
+}
+
+function collectFields(value: unknown, path: Array<string | number>, fields: FieldEntry[], depth: number) {
+  if (path.length) {
+    fields.push({
+      key: path.join("."),
+      label: formatPath(path),
+      type: valueType(value),
+      preview: previewValue(value),
+      expression: expressionForPath(path),
+      depth: Math.max(0, depth - 1)
+    });
+  }
+
+  if (depth >= 4 || fields.length >= 80) {
+    return;
+  }
+
+  if (isPlainObject(value)) {
+    for (const [key, child] of Object.entries(value)) {
+      collectFields(child, [...path, key], fields, depth + 1);
+    }
+    return;
+  }
+
+  if (Array.isArray(value) && value.length > 0) {
+    collectFields(value[0], [...path, 0], fields, depth + 1);
+  }
+}
+
+function formatPath(path: Array<string | number>): string {
+  return path
+    .map((part, index) => {
+      if (typeof part === "number") {
+        return `[${part}]`;
+      }
+      return index === 0 ? part : `.${part}`;
+    })
+    .join("");
+}
+
+function expressionForPath(path: Array<string | number>): string | null {
+  const [first, ...rest] = path;
+  if (typeof first !== "string" || !isPythonIdentifier(first)) {
+    return null;
+  }
+
+  const expression = rest.reduce((current, part) => {
+    if (typeof part === "number") {
+      return `${current}[${part}]`;
+    }
+    return `${current}[${JSON.stringify(part)}]`;
+  }, first);
+  return `{{${expression}}}`;
+}
+
+function valueType(value: unknown): string {
+  if (Array.isArray(value)) {
+    return "array";
+  }
+  if (value === null) {
+    return "null";
+  }
+  return typeof value;
+}
+
+function previewValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.length}]`;
+  }
+  if (isPlainObject(value)) {
+    return `{${Object.keys(value).length}}`;
+  }
+  if (typeof value === "string") {
+    return value.length > 18 ? `${value.slice(0, 18)}...` : value;
+  }
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return String(value);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPythonIdentifier(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 
 function defaultPayload(): Record<string, unknown> {
