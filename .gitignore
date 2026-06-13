@@ -12,7 +12,7 @@ build/
 *.egg-info/
 node_modules/
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
 *.sqlite3
 *.db
 .onestep-web/
-
