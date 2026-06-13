@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   connectionStateForNode,
+  disconnectGraphNode,
+  duplicateGraphNode,
   handlesForNodeKind,
   nextNodePosition,
   removeGraphNode,
@@ -111,6 +113,55 @@ describe("graph editing", () => {
     expect(removeGraphNode(graph, "handler")).toEqual({
       nodes: [graph.nodes[0], graph.nodes[2], graph.nodes[3]],
       edges: []
+    });
+  });
+
+  it("removes only connected edges when a node is disconnected", () => {
+    const graph: PipelineGraph = {
+      nodes: [source("source"), handler("handler"), sink("sink"), sink("audit")],
+      edges: [
+        { from: "source", to: "handler" },
+        { from: "handler", to: "sink" },
+        { from: "source", to: "audit" }
+      ]
+    };
+
+    expect(disconnectGraphNode(graph, "handler")).toEqual({
+      nodes: graph.nodes,
+      edges: [{ from: "source", to: "audit" }]
+    });
+  });
+
+  it("duplicates a node with a unique id and offset position", () => {
+    const graph: PipelineGraph = {
+      nodes: [handler("handler"), handler("handler_copy")],
+      edges: []
+    };
+    graph.nodes[0] = {
+      ...graph.nodes[0],
+      config: { queue: "orders" },
+      mapping: { id: "{{order_id}}" },
+      input_schema: { type: "object" },
+      position: { x: 120, y: 180 }
+    };
+
+    expect(duplicateGraphNode(graph, "handler")).toEqual({
+      graph: {
+        nodes: [
+          graph.nodes[0],
+          graph.nodes[1],
+          {
+            ...graph.nodes[0],
+            id: "handler_copy_2",
+            config: { queue: "orders" },
+            mapping: { id: "{{order_id}}" },
+            input_schema: { type: "object" },
+            position: { x: 156, y: 216 }
+          }
+        ],
+        edges: []
+      },
+      nodeId: "handler_copy_2"
     });
   });
 });

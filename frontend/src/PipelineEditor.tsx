@@ -16,7 +16,16 @@ import {
   type Node,
   type NodeChange
 } from "@xyflow/react";
-import { memo, useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent
+} from "react";
 import type { ConnectorDescriptor, Credential, GraphEdge, GraphNode, PipelineGraph } from "./types";
 import { NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
@@ -31,6 +40,11 @@ type PipelineNodeData = {
   nodeId?: string;
   kind?: GraphNode["kind"];
   connectionState?: string | null;
+  hasConnections?: boolean;
+  onConfigure?: (nodeId: string) => void;
+  onDelete?: (nodeId: string) => void;
+  onDisconnect?: (nodeId: string) => void;
+  onDuplicate?: (nodeId: string) => void;
 };
 
 type CanvasContextMenu = {
@@ -62,14 +76,6 @@ export function PipelineEditor({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu | null>(null);
   const canvasRef = useRef<HTMLElement | null>(null);
-  const nodes = useMemo(
-    () => graph.nodes.map((node) => toFlowNode(node, graph.edges, selectedNodeId)),
-    [graph.edges, graph.nodes, selectedNodeId]
-  );
-  const edges = useMemo(
-    () => graph.edges.map((edge) => toFlowEdge(edge, selectedEdgeId)),
-    [graph.edges, selectedEdgeId]
-  );
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedConnector = selectedNode
     ? connectors.find((connector) => connector.type === selectedNode.type) ?? null
@@ -106,6 +112,67 @@ export function PipelineEditor({
       onGraphChange(nextGraph);
     },
     [graph.edges, graph.nodes, onGraphChange]
+  );
+
+  const configureNode = useCallback((nodeId: string) => {
+    setConnectionError("");
+    setContextMenu(null);
+    setSelectedEdgeId(null);
+    onSelectedNodeChange(nodeId);
+  }, [onSelectedNodeChange]);
+
+  const deleteNode = useCallback((nodeId: string) => {
+    onGraphChange(removeGraphNode(graph, nodeId));
+    setDebugSamples((current) => {
+      const next = { ...current };
+      delete next[nodeId];
+      return next;
+    });
+    setConnectionError("");
+    setContextMenu(null);
+    setSelectedEdgeId(null);
+    if (selectedNodeId === nodeId) {
+      onSelectedNodeChange(null);
+    }
+  }, [graph, onGraphChange, onSelectedNodeChange, selectedNodeId]);
+
+  const disconnectNode = useCallback((nodeId: string) => {
+    onGraphChange(disconnectGraphNode(graph, nodeId));
+    setConnectionError("");
+    setContextMenu(null);
+    setSelectedEdgeId(null);
+    onSelectedNodeChange(nodeId);
+  }, [graph, onGraphChange, onSelectedNodeChange]);
+
+  const duplicateNode = useCallback((nodeId: string) => {
+    const duplicated = duplicateGraphNode(graph, nodeId);
+    if (!duplicated) {
+      return;
+    }
+    onGraphChange(duplicated.graph);
+    setConnectionError("");
+    setContextMenu(null);
+    setSelectedEdgeId(null);
+    onSelectedNodeChange(duplicated.nodeId);
+  }, [graph, onGraphChange, onSelectedNodeChange]);
+
+  const nodeActions = useMemo(
+    () => ({
+      onConfigure: configureNode,
+      onDelete: deleteNode,
+      onDisconnect: disconnectNode,
+      onDuplicate: duplicateNode
+    }),
+    [configureNode, deleteNode, disconnectNode, duplicateNode]
+  );
+
+  const nodes = useMemo(
+    () => graph.nodes.map((node) => toFlowNode(node, graph.edges, selectedNodeId, nodeActions)),
+    [graph.edges, graph.nodes, nodeActions, selectedNodeId]
+  );
+  const edges = useMemo(
+    () => graph.edges.map((edge) => toFlowEdge(edge, selectedEdgeId)),
+    [graph.edges, selectedEdgeId]
   );
 
   const handleNodesChange = useCallback(
@@ -169,21 +236,6 @@ export function PipelineEditor({
     setSelectedEdgeId(null);
   }, [edges, nodes, selectedEdgeId, updateFromFlow]);
 
-  const deleteNode = useCallback((nodeId: string) => {
-    onGraphChange(removeGraphNode(graph, nodeId));
-    setDebugSamples((current) => {
-      const next = { ...current };
-      delete next[nodeId];
-      return next;
-    });
-    setConnectionError("");
-    setContextMenu(null);
-    setSelectedEdgeId(null);
-    if (selectedNodeId === nodeId) {
-      onSelectedNodeChange(null);
-    }
-  }, [graph, onGraphChange, onSelectedNodeChange, selectedNodeId]);
-
   const deleteEdge = useCallback((edgeId: string) => {
     updateFromFlow(
       nodes,
@@ -195,6 +247,36 @@ export function PipelineEditor({
       setSelectedEdgeId(null);
     }
   }, [edges, nodes, selectedEdgeId, updateFromFlow]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+      if (event.key === "Escape") {
+        setConnectionError("");
+        setContextMenu(null);
+        setSelectedEdgeId(null);
+        onSelectedNodeChange(null);
+        return;
+      }
+      if (event.key !== "Delete" && event.key !== "Backspace") {
+        return;
+      }
+      if (selectedNodeId) {
+        event.preventDefault();
+        deleteNode(selectedNodeId);
+        return;
+      }
+      if (selectedEdgeId) {
+        event.preventDefault();
+        deleteEdge(selectedEdgeId);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deleteEdge, deleteNode, onSelectedNodeChange, selectedEdgeId, selectedNodeId]);
 
   const clearEdgeCondition = useCallback((edgeId: string) => {
     onGraphChange({
@@ -315,6 +397,9 @@ export function PipelineEditor({
   const contextGraphEdge = contextMenu?.target === "edge"
     ? graph.edges.find((edge) => flowEdgeId(edge) === contextMenu.id) ?? null
     : null;
+  const contextNodeHasConnections = contextGraphNode
+    ? graph.edges.some((edge) => edge.from === contextGraphNode.id || edge.to === contextGraphNode.id)
+    : false;
 
   return (
     <main className="builder-grid">
@@ -338,6 +423,11 @@ export function PipelineEditor({
                 />
               </label>
             ) : null}
+            {selectedGraphEdge.condition ? (
+              <button onClick={() => clearEdgeCondition(flowEdgeId(selectedGraphEdge))} type="button">
+                Clear Condition
+              </button>
+            ) : null}
             <button onClick={deleteSelectedEdge} type="button">
               Delete Connection
             </button>
@@ -351,14 +441,18 @@ export function PipelineEditor({
           >
             {contextGraphNode ? (
               <>
+                <button onClick={() => configureNode(contextGraphNode.id)} type="button">
+                  Configure Node
+                </button>
+                <button onClick={() => duplicateNode(contextGraphNode.id)} type="button">
+                  Duplicate Node
+                </button>
                 <button
-                  onClick={() => {
-                    onSelectedNodeChange(contextGraphNode.id);
-                    setContextMenu(null);
-                  }}
+                  disabled={!contextNodeHasConnections}
+                  onClick={() => disconnectNode(contextGraphNode.id)}
                   type="button"
                 >
-                  Configure Node
+                  Disconnect Node
                 </button>
                 <button onClick={() => deleteNode(contextGraphNode.id)} type="button">
                   Delete Node
@@ -392,7 +486,7 @@ export function PipelineEditor({
           autoPanOnConnect
           autoPanOnNodeDrag
           connectionLineStyle={CONNECTION_LINE_STYLE}
-          connectionLineType={ConnectionLineType.Straight}
+          connectionLineType={ConnectionLineType.SmoothStep}
           connectionRadius={28}
           defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
           defaultViewport={DEFAULT_VIEWPORT}
@@ -433,6 +527,42 @@ export function removeGraphNode(graph: PipelineGraph, nodeId: string): PipelineG
   return {
     nodes: graph.nodes.filter((node) => node.id !== nodeId),
     edges: graph.edges.filter((edge) => edge.from !== nodeId && edge.to !== nodeId)
+  };
+}
+
+export function disconnectGraphNode(graph: PipelineGraph, nodeId: string): PipelineGraph {
+  return {
+    ...graph,
+    edges: graph.edges.filter((edge) => edge.from !== nodeId && edge.to !== nodeId)
+  };
+}
+
+export function duplicateGraphNode(
+  graph: PipelineGraph,
+  nodeId: string
+): { graph: PipelineGraph; nodeId: string } | null {
+  const node = graph.nodes.find((item) => item.id === nodeId);
+  if (!node) {
+    return null;
+  }
+  const nextNodeId = nextDuplicateNodeId(graph, nodeId);
+  const nextNode: GraphNode = {
+    ...node,
+    id: nextNodeId,
+    config: { ...node.config },
+    mapping: { ...node.mapping },
+    input_schema: { ...node.input_schema },
+    position: {
+      x: node.position.x + 36,
+      y: node.position.y + 36
+    }
+  };
+  return {
+    graph: {
+      ...graph,
+      nodes: [...graph.nodes, nextNode]
+    },
+    nodeId: nextNodeId
   };
 }
 
@@ -509,9 +639,11 @@ function firstUpstreamSample(
 function toFlowNode(
   node: GraphNode,
   edges: Array<{ from: string; to: string }>,
-  selectedNodeId: string | null
+  selectedNodeId: string | null,
+  actions: Pick<PipelineNodeData, "onConfigure" | "onDelete" | "onDisconnect" | "onDuplicate">
 ): Node {
   const connectionState = connectionStateForNode(node, edges);
+  const hasConnections = edges.some((edge) => edge.from === node.id || edge.to === node.id);
   return {
     id: node.id,
     position: node.position,
@@ -522,7 +654,9 @@ function toFlowNode(
       label: node.type,
       nodeId: node.id,
       kind: node.kind,
-      connectionState
+      connectionState,
+      hasConnections,
+      ...actions
     },
     type: "pipelineNode",
     measured: { width: PIPELINE_NODE_WIDTH, height: PIPELINE_NODE_HEIGHT },
@@ -548,6 +682,7 @@ function toFlowEdge(edge: GraphEdge, selectedEdgeId: string | null): Edge {
     labelStyle: { fontSize: 12, fontWeight: 700 },
     markerEnd: { type: MarkerType.ArrowClosed },
     animated: true,
+    interactionWidth: 24,
     style: { strokeDasharray: condition ? "6 4" : undefined, strokeWidth: 2 },
     selected: id === selectedEdgeId
   };
@@ -581,6 +716,25 @@ function createGraphNode(id: string, type: string, kind: GraphNode["kind"], posi
     input_schema: {},
     position
   };
+}
+
+function nextDuplicateNodeId(graph: PipelineGraph, nodeId: string): string {
+  const existingIds = new Set(graph.nodes.map((node) => node.id));
+  let index = 1;
+  let candidate = `${nodeId}_copy`;
+  while (existingIds.has(candidate)) {
+    index += 1;
+    candidate = `${nodeId}_copy_${index}`;
+  }
+  return candidate;
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tagName = target.tagName.toLowerCase();
+  return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
 }
 
 export function handlesForNodeKind(kind: GraphNode["kind"]): ConnectionHandles {
@@ -617,10 +771,68 @@ export function connectionStateForNode(
 
 const PipelineFlowNode = memo(function PipelineFlowNode({ data }: { data: PipelineNodeData }) {
   const kind = data.kind ?? "handler";
+  const nodeId = data.nodeId ?? "";
   const handles = handlesForNodeKind(kind);
+  const stopNodeAction = (event: SyntheticEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
   return (
     <div className={`pipeline-flow-node ${kind}`}>
       {handles.target ? <Handle className="pipeline-handle target-handle" type="target" position={Position.Left} /> : null}
+      {nodeId ? (
+        <div className="node-quick-actions">
+          <button
+            className="nodrag"
+            onClick={(event) => {
+              stopNodeAction(event);
+              data.onConfigure?.(nodeId);
+            }}
+            onPointerDown={stopNodeAction}
+            title="Configure node"
+            type="button"
+          >
+            Edit
+          </button>
+          <button
+            className="nodrag"
+            onClick={(event) => {
+              stopNodeAction(event);
+              data.onDuplicate?.(nodeId);
+            }}
+            onPointerDown={stopNodeAction}
+            title="Duplicate node"
+            type="button"
+          >
+            Copy
+          </button>
+          <button
+            className="nodrag"
+            disabled={!data.hasConnections}
+            onClick={(event) => {
+              stopNodeAction(event);
+              data.onDisconnect?.(nodeId);
+            }}
+            onPointerDown={stopNodeAction}
+            title="Disconnect node"
+            type="button"
+          >
+            Cut
+          </button>
+          <button
+            className="nodrag danger"
+            onClick={(event) => {
+              stopNodeAction(event);
+              data.onDelete?.(nodeId);
+            }}
+            onPointerDown={stopNodeAction}
+            title="Delete node"
+            type="button"
+          >
+            Del
+          </button>
+        </div>
+      ) : null}
       <span>{kind}</span>
       <strong>{data.label}</strong>
       <small className={data.connectionState ? "connection-state" : undefined}>

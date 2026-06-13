@@ -382,6 +382,15 @@ button:active,
   background: #f3f0e8;
 }
 
+.canvas-context-menu button:disabled {
+  color: var(--line-strong);
+  cursor: default;
+}
+
+.canvas-context-menu button:disabled:hover {
+  background: transparent;
+}
+
 .react-flow__node-default {
   border-radius: 0;
   border-color: var(--ink);
@@ -397,6 +406,7 @@ button:active,
 .pipeline-flow-node {
   width: 220px;
   height: 74px;
+  position: relative;
   display: grid;
   align-content: center;
   gap: 2px;
@@ -408,6 +418,58 @@ button:active,
     border-color 120ms ease,
     box-shadow 120ms ease;
   user-select: none;
+}
+
+.react-flow__node:hover {
+  z-index: 7 !important;
+}
+
+.node-quick-actions {
+  position: absolute;
+  top: -34px;
+  right: -2px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.react-flow__node:hover .node-quick-actions,
+.react-flow__node.selected .node-quick-actions,
+.pipeline-flow-node:focus-within .node-quick-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.node-quick-actions button {
+  min-height: 26px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  box-shadow: 3px 3px 0 rgb(22 23 18 / 10%);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 7px;
+}
+
+.node-quick-actions button:hover {
+  border-color: var(--ink);
+  transform: none;
+}
+
+.node-quick-actions button:disabled {
+  color: var(--line-strong);
+  cursor: default;
+  box-shadow: none;
+}
+
+.node-quick-actions button.danger {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
 }
 
 .pipeline-flow-node span {
