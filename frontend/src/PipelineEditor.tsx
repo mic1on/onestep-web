@@ -6,13 +6,16 @@ import {
   Controls,
   MarkerType,
   MiniMap,
+  Position,
   ReactFlow,
   type Connection,
   type Edge,
   type EdgeChange,
+  Handle,
   type Node,
   type NodeChange
 } from "@xyflow/react";
+import { useMemo } from "react";
 import type { ConnectorDescriptor, Credential, GraphNode, PipelineGraph } from "./types";
 import { NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
@@ -40,6 +43,7 @@ export function PipelineEditor({
   const selectedConnector = selectedNode
     ? connectors.find((connector) => connector.type === selectedNode.type) ?? null
     : null;
+  const nodeTypes = useMemo(() => ({ pipelineNode: PipelineFlowNode }), []);
 
   function updateFromFlow(nextNodes: Node[], nextEdges: Edge[]) {
     const nextGraph: PipelineGraph = {
@@ -103,6 +107,7 @@ export function PipelineEditor({
         <ReactFlow
           edges={edges}
           fitView
+          nodeTypes={nodeTypes}
           nodes={nodes}
           onConnect={handleConnect}
           onEdgesChange={handleEdgesChange}
@@ -129,8 +134,15 @@ function toFlowNode(node: GraphNode): Node {
   return {
     id: node.id,
     position: node.position,
-    data: { label: `${node.id} · ${node.type}` },
-    type: "default"
+    data: {
+      label: node.type,
+      nodeId: node.id,
+      kind: node.kind
+    },
+    type: "pipelineNode",
+    width: 220,
+    height: 74,
+    style: { width: 220, height: 74 }
   };
 }
 
@@ -157,3 +169,14 @@ function createGraphNode(id: string, type: string, kind: GraphNode["kind"], posi
   };
 }
 
+function PipelineFlowNode({ data }: { data: { label?: string; nodeId?: string; kind?: string } }) {
+  return (
+    <div className={`pipeline-flow-node ${data.kind ?? "handler"}`}>
+      <Handle type="target" position={Position.Top} />
+      <span>{data.kind}</span>
+      <strong>{data.label}</strong>
+      <small>{data.nodeId}</small>
+      <Handle type="source" position={Position.Bottom} />
+    </div>
+  );
+}

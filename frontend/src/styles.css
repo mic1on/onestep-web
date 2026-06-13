@@ -253,6 +253,51 @@ button:hover,
   font-weight: 700;
 }
 
+.react-flow__node-pipelineNode {
+  width: 220px;
+  height: 74px;
+}
+
+.pipeline-flow-node {
+  width: 220px;
+  height: 74px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  border: 2px solid var(--ink);
+  background: #fff;
+  box-shadow: 8px 8px 0 rgb(22 23 18 / 14%);
+  padding: 10px 14px;
+}
+
+.pipeline-flow-node span {
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.pipeline-flow-node strong {
+  font-size: 15px;
+}
+
+.pipeline-flow-node small {
+  color: var(--muted);
+}
+
+.pipeline-flow-node.source {
+  border-left: 8px solid var(--green);
+}
+
+.pipeline-flow-node.handler {
+  border-left: 8px solid var(--accent);
+}
+
+.pipeline-flow-node.sink {
+  border-left: 8px solid var(--accent-2);
+}
+
 .react-flow__handle {
   border-radius: 0;
   background: var(--accent);

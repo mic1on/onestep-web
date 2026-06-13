@@ -50,29 +50,28 @@ export function App() {
     setMessage(`Loaded ${pipeline.name}`);
   }
 
-  async function savePipeline() {
+  async function savePipeline(): Promise<Pipeline> {
     if (activePipelineId) {
       const saved = await api.updatePipeline(activePipelineId, { name: draftName, graph: draftGraph });
       setPipelines((current) => current.map((item) => (item.id === saved.id ? saved : item)));
       setMessage("Saved changes");
-      return;
+      return saved;
     }
     const created = await api.createPipeline({ name: draftName, description: "", graph: draftGraph });
     setPipelines((current) => [created, ...current]);
     setActivePipelineId(created.id);
     setMessage("Created pipeline");
+    return created;
   }
 
   async function startPipeline() {
-    if (!activePipelineId) {
-      await savePipeline();
-    }
-    const id = activePipelineId;
-    if (!id) {
-      return;
-    }
+    const pipeline = activePipelineId
+      ? await api.updatePipeline(activePipelineId, { name: draftName, graph: draftGraph })
+      : await savePipeline();
+    const id = pipeline.id;
     const status = await api.startPipeline(id);
     await refresh();
+    setActivePipelineId(id);
     setMessage(status.message);
   }
 
@@ -89,6 +88,22 @@ export function App() {
     await api.createCredential(input);
     setCredentials(await api.listCredentials());
     setMessage("Credential saved");
+  }
+
+  async function exportPipeline() {
+    if (!activePipelineId) {
+      return;
+    }
+    const blob = await api.exportPipeline(activePipelineId);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${activePipelineId}.zip`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setMessage("Export started");
   }
 
   return (
@@ -118,18 +133,14 @@ export function App() {
               Start
             </button>
           )}
-          <a
-            aria-disabled={!activePipelineId}
+          <button
             className={activePipelineId ? "button-link-export" : "button-link-export disabled"}
-            href={activePipelineId ? api.exportUrl(activePipelineId) : undefined}
-            onClick={(event) => {
-              if (!activePipelineId) {
-                event.preventDefault();
-              }
-            }}
+            disabled={!activePipelineId}
+            onClick={exportPipeline}
+            type="button"
           >
             Export
-          </a>
+          </button>
         </div>
       </header>
 
@@ -178,4 +189,3 @@ export function App() {
     </div>
   );
 }
-

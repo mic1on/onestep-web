@@ -64,8 +64,12 @@ export const api = {
   async listLogs(id: string): Promise<PipelineLog[]> {
     return request<PipelineLog[]>(`/api/pipelines/${id}/logs`);
   },
-  exportUrl(id: string): string {
-    return `/api/pipelines/${id}/export`;
+  async exportPipeline(id: string): Promise<Blob> {
+    const response = await fetch(`/api/pipelines/${id}/export`, { method: "POST" });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return response.blob();
   }
 };
 
@@ -73,4 +77,3 @@ export function openPipelineLogSocket(id: string): WebSocket {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   return new WebSocket(`${protocol}://${window.location.host}/ws/pipelines/${id}`);
 }
-
