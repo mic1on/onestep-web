@@ -43,6 +43,9 @@ onestep = { path = "../onestep", editable = true }
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+  "integration: tests that require local Docker connector services",
+]
 
 [tool.ruff]
 line-length = 100
