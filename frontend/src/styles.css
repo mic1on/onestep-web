@@ -248,7 +248,7 @@ button:active,
 
 .builder-grid {
   display: grid;
-  grid-template-columns: 260px minmax(520px, 1fr) 360px;
+  grid-template-columns: 240px minmax(640px, 1fr) 320px;
   gap: 12px;
   height: calc(100vh - 332px);
   min-height: 520px;
@@ -360,6 +360,10 @@ button:active,
   background: #fff;
   box-shadow: 8px 8px 0 rgb(22 23 18 / 14%);
   padding: 10px 14px;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+  user-select: none;
 }
 
 .pipeline-flow-node span {
@@ -404,6 +408,36 @@ button:active,
 .react-flow__handle {
   border-radius: 0;
   background: var(--accent);
+  border: 2px solid #fff;
+  height: 14px;
+  width: 14px;
+}
+
+.pipeline-handle.source-handle {
+  right: -7px;
+}
+
+.pipeline-handle.target-handle {
+  left: -7px;
+}
+
+.react-flow__handle.connecting,
+.react-flow__handle.valid {
+  background: var(--green);
+}
+
+.react-flow__connection-path {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-width: 2.5;
 }
 
 .panel-heading,

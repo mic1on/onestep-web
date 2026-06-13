@@ -83,11 +83,15 @@ describe("connection affordances", () => {
   });
 
   it("places new nodes in visible non-overlapping rows", () => {
-    expect(nextNodePosition(graphWithNodes(), "source")).toEqual({ x: 80, y: 80 });
-    expect(nextNodePosition(graphWithNodes(source("source")), "handler")).toEqual({ x: 190, y: 170 });
+    expect(nextNodePosition(graphWithNodes(), "source")).toEqual({ x: 40, y: 80 });
+    expect(nextNodePosition(graphWithNodes(source("source")), "handler")).toEqual({ x: 330, y: 80 });
     expect(nextNodePosition(graphWithNodes(source("source"), handler("handler")), "sink")).toEqual({
-      x: 190,
-      y: 260
+      x: 620,
+      y: 80
+    });
+    expect(nextNodePosition(graphWithNodes(source("a"), source("b"), handler("handler")), "source")).toEqual({
+      x: 40,
+      y: 320
     });
   });
 });
