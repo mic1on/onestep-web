@@ -16,7 +16,7 @@ import {
   type Node,
   type NodeChange
 } from "@xyflow/react";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { ConnectorDescriptor, Credential, GraphEdge, GraphNode, PipelineGraph } from "./types";
 import { NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
@@ -31,6 +31,13 @@ type PipelineNodeData = {
   nodeId?: string;
   kind?: GraphNode["kind"];
   connectionState?: string | null;
+};
+
+type CanvasContextMenu = {
+  target: "node" | "edge";
+  id: string;
+  x: number;
+  y: number;
 };
 
 type PipelineEditorProps = {
@@ -53,6 +60,8 @@ export function PipelineEditor({
   const [debugSamples, setDebugSamples] = useState<Record<string, unknown>>({});
   const [connectionError, setConnectionError] = useState("");
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<CanvasContextMenu | null>(null);
+  const canvasRef = useRef<HTMLElement | null>(null);
   const nodes = useMemo(
     () => graph.nodes.map((node) => toFlowNode(node, graph.edges, selectedNodeId)),
     [graph.edges, graph.nodes, selectedNodeId]
@@ -160,6 +169,45 @@ export function PipelineEditor({
     setSelectedEdgeId(null);
   }, [edges, nodes, selectedEdgeId, updateFromFlow]);
 
+  const deleteNode = useCallback((nodeId: string) => {
+    onGraphChange(removeGraphNode(graph, nodeId));
+    setDebugSamples((current) => {
+      const next = { ...current };
+      delete next[nodeId];
+      return next;
+    });
+    setConnectionError("");
+    setContextMenu(null);
+    setSelectedEdgeId(null);
+    if (selectedNodeId === nodeId) {
+      onSelectedNodeChange(null);
+    }
+  }, [graph, onGraphChange, onSelectedNodeChange, selectedNodeId]);
+
+  const deleteEdge = useCallback((edgeId: string) => {
+    updateFromFlow(
+      nodes,
+      edges.filter((edge) => edge.id !== edgeId)
+    );
+    setConnectionError("");
+    setContextMenu(null);
+    if (selectedEdgeId === edgeId) {
+      setSelectedEdgeId(null);
+    }
+  }, [edges, nodes, selectedEdgeId, updateFromFlow]);
+
+  const clearEdgeCondition = useCallback((edgeId: string) => {
+    onGraphChange({
+      ...graph,
+      edges: graph.edges.map((edge) =>
+        flowEdgeId(edge) === edgeId
+          ? { ...edge, condition: null }
+          : edge
+      )
+    });
+    setContextMenu(null);
+  }, [graph, onGraphChange]);
+
   const updateSelectedEdgeCondition = useCallback((condition: string) => {
     if (!selectedEdgeId) {
       return;
@@ -202,24 +250,76 @@ export function PipelineEditor({
 
   const handleEdgeClick = useCallback((_: unknown, edge: Edge) => {
     setConnectionError("");
+    setContextMenu(null);
     setSelectedEdgeId(String(edge.id));
     onSelectedNodeChange(null);
   }, [onSelectedNodeChange]);
 
   const handleNodeClick = useCallback((_: unknown, node: Node) => {
+    setContextMenu(null);
     setSelectedEdgeId(null);
     onSelectedNodeChange(String(node.id));
   }, [onSelectedNodeChange]);
 
   const handlePaneClick = useCallback(() => {
+    setContextMenu(null);
     setSelectedEdgeId(null);
     onSelectedNodeChange(null);
   }, [onSelectedNodeChange]);
 
+  const handlePaneContextMenu = useCallback((event: MouseEvent | ReactMouseEvent) => {
+    event.preventDefault();
+    setContextMenu(null);
+  }, []);
+
+  const openContextMenu = useCallback(
+    (event: ReactMouseEvent, target: CanvasContextMenu["target"], id: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const bounds = canvasRef.current?.getBoundingClientRect();
+      setContextMenu({
+        target,
+        id,
+        x: Math.max(8, event.clientX - (bounds?.left ?? 0)),
+        y: Math.max(8, event.clientY - (bounds?.top ?? 0))
+      });
+      setConnectionError("");
+      if (target === "node") {
+        setSelectedEdgeId(null);
+        onSelectedNodeChange(id);
+      } else {
+        setSelectedEdgeId(id);
+        onSelectedNodeChange(null);
+      }
+    },
+    [onSelectedNodeChange]
+  );
+
+  const handleNodeContextMenu = useCallback(
+    (event: ReactMouseEvent, node: Node) => {
+      openContextMenu(event, "node", String(node.id));
+    },
+    [openContextMenu]
+  );
+
+  const handleEdgeContextMenu = useCallback(
+    (event: ReactMouseEvent, edge: Edge) => {
+      openContextMenu(event, "edge", String(edge.id));
+    },
+    [openContextMenu]
+  );
+
+  const contextGraphNode = contextMenu?.target === "node"
+    ? graph.nodes.find((node) => node.id === contextMenu.id) ?? null
+    : null;
+  const contextGraphEdge = contextMenu?.target === "edge"
+    ? graph.edges.find((edge) => flowEdgeId(edge) === contextMenu.id) ?? null
+    : null;
+
   return (
     <main className="builder-grid">
       <NodePalette connectors={connectors} onAddNode={addConnectorNode} />
-      <section className="canvas-shell" aria-label="Pipeline canvas">
+      <section className="canvas-shell" aria-label="Pipeline canvas" ref={canvasRef}>
         {connectionError ? <div className="canvas-alert">{connectionError}</div> : null}
         {selectedGraphEdge ? (
           <div className="canvas-alert canvas-edge-toolbar">
@@ -243,6 +343,51 @@ export function PipelineEditor({
             </button>
           </div>
         ) : null}
+        {contextMenu ? (
+          <div
+            className="canvas-context-menu"
+            onClick={(event) => event.stopPropagation()}
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            {contextGraphNode ? (
+              <>
+                <button
+                  onClick={() => {
+                    onSelectedNodeChange(contextGraphNode.id);
+                    setContextMenu(null);
+                  }}
+                  type="button"
+                >
+                  Configure Node
+                </button>
+                <button onClick={() => deleteNode(contextGraphNode.id)} type="button">
+                  Delete Node
+                </button>
+              </>
+            ) : null}
+            {contextGraphEdge ? (
+              <>
+                <button
+                  onClick={() => {
+                    setSelectedEdgeId(flowEdgeId(contextGraphEdge));
+                    setContextMenu(null);
+                  }}
+                  type="button"
+                >
+                  Select Connection
+                </button>
+                {contextGraphEdge.condition ? (
+                  <button onClick={() => clearEdgeCondition(flowEdgeId(contextGraphEdge))} type="button">
+                    Clear Condition
+                  </button>
+                ) : null}
+                <button onClick={() => deleteEdge(flowEdgeId(contextGraphEdge))} type="button">
+                  Delete Connection
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <ReactFlow
           autoPanOnConnect
           autoPanOnNodeDrag
@@ -259,9 +404,12 @@ export function PipelineEditor({
           onConnect={handleConnect}
           onEdgesChange={handleEdgesChange}
           onEdgeClick={handleEdgeClick}
+          onEdgeContextMenu={handleEdgeContextMenu}
           onNodeClick={handleNodeClick}
+          onNodeContextMenu={handleNodeContextMenu}
           onNodesChange={handleNodesChange}
           onPaneClick={handlePaneClick}
+          onPaneContextMenu={handlePaneContextMenu}
           paneClickDistance={3}
         >
           <Background gap={24} />
@@ -279,6 +427,13 @@ export function PipelineEditor({
       />
     </main>
   );
+}
+
+export function removeGraphNode(graph: PipelineGraph, nodeId: string): PipelineGraph {
+  return {
+    nodes: graph.nodes.filter((node) => node.id !== nodeId),
+    edges: graph.edges.filter((edge) => edge.from !== nodeId && edge.to !== nodeId)
+  };
 }
 
 export function validateGraphConnection(

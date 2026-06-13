@@ -3,6 +3,7 @@ import {
   connectionStateForNode,
   handlesForNodeKind,
   nextNodePosition,
+  removeGraphNode,
   validateGraphConnection
 } from "./PipelineEditor";
 import type { GraphNode, PipelineGraph } from "./types";
@@ -92,6 +93,24 @@ describe("connection affordances", () => {
     expect(nextNodePosition(graphWithNodes(source("a"), source("b"), handler("handler")), "source")).toEqual({
       x: 40,
       y: 320
+    });
+  });
+});
+
+describe("graph editing", () => {
+  it("removes connected edges when a node is deleted", () => {
+    const graph: PipelineGraph = {
+      nodes: [source("source"), handler("handler"), sink("sink"), sink("audit")],
+      edges: [
+        { from: "source", to: "handler" },
+        { from: "handler", to: "sink" },
+        { from: "handler", to: "audit", condition: 'status == "paid"' }
+      ]
+    };
+
+    expect(removeGraphNode(graph, "handler")).toEqual({
+      nodes: [graph.nodes[0], graph.nodes[2], graph.nodes[3]],
+      edges: []
     });
   });
 });
