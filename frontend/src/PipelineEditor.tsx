@@ -45,6 +45,7 @@ export function PipelineEditor({
     : null;
   const nodeTypes = useMemo(() => ({ pipelineNode: PipelineFlowNode }), []);
   const [debugSamples, setDebugSamples] = useState<Record<string, unknown>>({});
+  const [connectionError, setConnectionError] = useState("");
   const upstreamSample = selectedNode ? firstUpstreamSample(selectedNode.id, graph, debugSamples) : null;
 
   function updateFromFlow(nextNodes: Node[], nextEdges: Edge[]) {
@@ -70,6 +71,12 @@ export function PipelineEditor({
   }
 
   function handleConnect(connection: Connection) {
+    const error = validateGraphConnection(graph, connection.source, connection.target);
+    if (error) {
+      setConnectionError(error);
+      return;
+    }
+    setConnectionError("");
     updateFromFlow(
       nodes,
       addEdge(
@@ -110,6 +117,7 @@ export function PipelineEditor({
     <main className="builder-grid">
       <NodePalette connectors={connectors} onAddNode={addConnectorNode} />
       <section className="canvas-shell" aria-label="Pipeline canvas">
+        {connectionError ? <div className="canvas-alert">{connectionError}</div> : null}
         <ReactFlow
           edges={edges}
           fitView
@@ -136,6 +144,64 @@ export function PipelineEditor({
       />
     </main>
   );
+}
+
+export function validateGraphConnection(
+  graph: PipelineGraph,
+  sourceId: string | null,
+  targetId: string | null
+): string | null {
+  if (!sourceId || !targetId) {
+    return "Connection must have both a source and a target node.";
+  }
+  if (sourceId === targetId) {
+    return "A node cannot connect to itself.";
+  }
+
+  const source = graph.nodes.find((node) => node.id === sourceId);
+  const target = graph.nodes.find((node) => node.id === targetId);
+  if (!source || !target) {
+    return "Connection references a missing node.";
+  }
+  if (source.kind === "sink") {
+    return "Sink nodes cannot have outgoing edges.";
+  }
+  if (target.kind === "source") {
+    return "Source nodes cannot have incoming edges.";
+  }
+  if (graph.edges.some((edge) => edge.from === sourceId && edge.to === targetId)) {
+    return "This connection already exists.";
+  }
+  if (wouldCreateCycle(graph, sourceId, targetId)) {
+    return "This connection would create a cycle.";
+  }
+  return null;
+}
+
+function wouldCreateCycle(graph: PipelineGraph, sourceId: string, targetId: string): boolean {
+  const outgoing = new Map<string, string[]>();
+  for (const node of graph.nodes) {
+    outgoing.set(node.id, []);
+  }
+  for (const edge of graph.edges) {
+    outgoing.get(edge.from)?.push(edge.to);
+  }
+  outgoing.get(sourceId)?.push(targetId);
+
+  const seen = new Set<string>();
+  const stack = [targetId];
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current || seen.has(current)) {
+      continue;
+    }
+    if (current === sourceId) {
+      return true;
+    }
+    seen.add(current);
+    stack.push(...(outgoing.get(current) ?? []));
+  }
+  return false;
 }
 
 function firstUpstreamSample(
