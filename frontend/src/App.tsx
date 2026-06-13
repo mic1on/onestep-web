@@ -90,6 +90,18 @@ export function App() {
     setMessage("Credential saved");
   }
 
+  async function updateCredential(id: string, input: Parameters<typeof api.updateCredential>[1]) {
+    await api.updateCredential(id, input);
+    setCredentials(await api.listCredentials());
+    setMessage("Credential updated");
+  }
+
+  async function deleteCredential(id: string) {
+    await api.deleteCredential(id);
+    setCredentials(await api.listCredentials());
+    setMessage("Credential deleted");
+  }
+
   async function exportPipeline() {
     if (!activePipelineId) {
       return;
@@ -183,7 +195,12 @@ export function App() {
       />
 
       <section className="lower-grid">
-        <CredentialManager credentials={credentials} onCreate={createCredential} />
+        <CredentialManager
+          credentials={credentials}
+          onCreate={createCredential}
+          onDelete={deleteCredential}
+          onUpdate={updateCredential}
+        />
         <LogsPanel pipelineId={activePipelineId} />
       </section>
     </div>

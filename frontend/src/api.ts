@@ -63,6 +63,26 @@ export const api = {
       body: JSON.stringify(input)
     });
   },
+  async updateCredential(
+    id: string,
+    input: {
+      name?: string;
+      connector_type?: string;
+      config?: Record<string, unknown>;
+      env_vars?: Record<string, string>;
+    }
+  ): Promise<Credential> {
+    return request<Credential>(`/api/credentials/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input)
+    });
+  },
+  async deleteCredential(id: string): Promise<void> {
+    const response = await fetch(`/api/credentials/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+  },
   async listLogs(id: string): Promise<PipelineLog[]> {
     return request<PipelineLog[]>(`/api/pipelines/${id}/logs`);
   },

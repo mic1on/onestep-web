@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import type { Credential } from "./types";
+
+type CredentialCreateInput = {
+  name: string;
+  connector_type: string;
+  config: Record<string, unknown>;
+  env_vars: Record<string, string>;
+};
+
+type CredentialUpdateInput = {
+  name: string;
+  connector_type: string;
+  config: Record<string, unknown>;
+  env_vars?: Record<string, string>;
+};
 
 type CredentialManagerProps = {
   credentials: Credential[];
-  onCreate: (input: {
-    name: string;
-    connector_type: string;
-    config: Record<string, unknown>;
-    env_vars: Record<string, string>;
-  }) => Promise<void>;
+  onCreate: (input: CredentialCreateInput) => Promise<void>;
+  onUpdate: (id: string, input: CredentialUpdateInput) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
 };
 
-export function CredentialManager({ credentials, onCreate }: CredentialManagerProps) {
+export function CredentialManager({ credentials, onCreate, onUpdate, onDelete }: CredentialManagerProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("PROD_RABBITMQ");
   const [connectorType, setConnectorType] = useState("rabbitmq");
   const [url, setUrl] = useState("amqp://user:${PASSWORD}@host:5672/");
@@ -23,7 +35,7 @@ export function CredentialManager({ credentials, onCreate }: CredentialManagerPr
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
 
-  async function submit(event: React.FormEvent) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     const input = buildCredentialInput({
       name,
@@ -37,7 +49,42 @@ export function CredentialManager({ credentials, onCreate }: CredentialManagerPr
       appId,
       appSecret
     });
-    await onCreate(input);
+    if (editingId) {
+      await onUpdate(editingId, input.update);
+      setEditingId(null);
+      return;
+    }
+    await onCreate(input.create);
+  }
+
+  function startEdit(credential: Credential) {
+    const config = credential.config;
+    const options = objectValue(config.options);
+    setEditingId(credential.id);
+    setName(credential.name);
+    setConnectorType(credential.connector_type);
+    setUrl(stringValue(config.url ?? config.dsn) || "amqp://user:${PASSWORD}@host:5672/");
+    setPassword("");
+    setRegionName(stringValue(config.region_name) || "us-east-1");
+    setAccessKeyId(stringValue(options.aws_access_key_id));
+    setSecretAccessKey(stringValue(options.aws_secret_access_key));
+    setSessionToken(stringValue(options.aws_session_token));
+    setAppId(stringValue(config.app_id));
+    setAppSecret(stringValue(config.app_secret));
+  }
+
+  function resetForm() {
+    setEditingId(null);
+    setName("PROD_RABBITMQ");
+    setConnectorType("rabbitmq");
+    setUrl("amqp://user:${PASSWORD}@host:5672/");
+    setPassword("");
+    setRegionName("us-east-1");
+    setAccessKeyId("");
+    setSecretAccessKey("");
+    setSessionToken("");
+    setAppId("");
+    setAppSecret("");
   }
 
   return (
@@ -52,6 +99,14 @@ export function CredentialManager({ credentials, onCreate }: CredentialManagerPr
             <strong>{credential.name}</strong>
             <span>{credential.connector_type}</span>
             <code>{Object.keys(credential.env_vars).join(", ") || "no env vars"}</code>
+            <div className="credential-actions">
+              <button onClick={() => startEdit(credential)} type="button">
+                Edit
+              </button>
+              <button className="danger-button" onClick={() => onDelete(credential.id)} type="button">
+                Delete
+              </button>
+            </div>
           </article>
         ))}
       </div>
@@ -117,8 +172,13 @@ export function CredentialManager({ credentials, onCreate }: CredentialManagerPr
           </>
         )}
         <button className="primary-button" type="submit">
-          Add Credential
+          {editingId ? "Update Credential" : "Add Credential"}
         </button>
+        {editingId ? (
+          <button onClick={resetForm} type="button">
+            Cancel
+          </button>
+        ) : null}
       </form>
     </section>
   );
@@ -135,12 +195,7 @@ function buildCredentialInput(input: {
   sessionToken: string;
   appId: string;
   appSecret: string;
-}): {
-  name: string;
-  connector_type: string;
-  config: Record<string, unknown>;
-  env_vars: Record<string, string>;
-} {
+}): { create: CredentialCreateInput; update: CredentialUpdateInput } {
   if (input.connector_type === "sqs") {
     const options: Record<string, string> = {};
     if (input.accessKeyId) {
@@ -152,7 +207,7 @@ function buildCredentialInput(input: {
     if (input.sessionToken) {
       options.aws_session_token = input.sessionToken;
     }
-    return {
+    const payload = {
       name: input.name,
       connector_type: input.connector_type,
       config: {
@@ -161,19 +216,40 @@ function buildCredentialInput(input: {
       },
       env_vars: {}
     };
+    return { create: payload, update: payload };
   }
   if (input.connector_type === "feishu_bitable") {
-    return {
+    const payload = {
       name: input.name,
       connector_type: input.connector_type,
       config: { app_id: input.appId, app_secret: input.appSecret },
       env_vars: {}
     };
+    return { create: payload, update: payload };
   }
-  return {
+  const create: CredentialCreateInput = {
     name: input.name,
     connector_type: input.connector_type,
     config: { url: input.url },
     env_vars: input.password ? { PASSWORD: input.password } : {}
   };
+  const update: CredentialUpdateInput = {
+    name: input.name,
+    connector_type: input.connector_type,
+    config: { url: input.url }
+  };
+  if (input.password) {
+    update.env_vars = { PASSWORD: input.password };
+  }
+  return { create, update };
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }

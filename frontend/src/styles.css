@@ -489,11 +489,18 @@ button:hover,
 .credential-row,
 .log-row {
   display: grid;
-  grid-template-columns: 1fr 120px minmax(120px, 200px);
+  grid-template-columns: 1fr 120px minmax(120px, 200px) auto;
   gap: 10px;
   align-items: center;
   border-top: 1px solid var(--line);
   padding: 8px 0;
+}
+
+.credential-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .credential-row code {
