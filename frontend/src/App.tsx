@@ -6,6 +6,7 @@ import { PipelineEditor } from "./PipelineEditor";
 import type { ConnectorDescriptor, Credential, Pipeline, PipelineGraph } from "./types";
 
 const EMPTY_GRAPH: PipelineGraph = { nodes: [], edges: [] };
+type AppView = "builder" | "credentials";
 
 export function App() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -16,6 +17,7 @@ export function App() {
   const [draftGraph, setDraftGraph] = useState<PipelineGraph>(EMPTY_GRAPH);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [activeView, setActiveView] = useState<AppView>("builder");
 
   const activePipeline = useMemo(
     () => pipelines.find((pipeline) => pipeline.id === activePipelineId) ?? null,
@@ -128,81 +130,116 @@ export function App() {
             <span>Visual pipeline builder</span>
           </div>
         </div>
-        <label className="pipeline-name">
-          <span>Pipeline</span>
-          <input onChange={(event) => setDraftName(event.target.value)} value={draftName} />
-        </label>
-        <div className="toolbar">
-          <button onClick={savePipeline} type="button">
-            Save
-          </button>
-          {activePipeline?.status === "running" ? (
-            <button className="danger-button" onClick={stopPipeline} type="button">
-              Stop
-            </button>
-          ) : (
-            <button className="primary-button" onClick={startPipeline} type="button">
-              Start
-            </button>
-          )}
+        <nav className="top-nav" aria-label="Workspace">
           <button
-            className={activePipelineId ? "button-link-export" : "button-link-export disabled"}
-            disabled={!activePipelineId}
-            onClick={exportPipeline}
+            className={activeView === "builder" ? "active" : ""}
+            onClick={() => setActiveView("builder")}
             type="button"
           >
-            Export
+            Builder
           </button>
-        </div>
+          <button
+            className={activeView === "credentials" ? "active" : ""}
+            onClick={() => setActiveView("credentials")}
+            type="button"
+          >
+            Credentials
+          </button>
+        </nav>
+        {activeView === "builder" ? (
+          <>
+            <label className="pipeline-name">
+              <span>Pipeline</span>
+              <input onChange={(event) => setDraftName(event.target.value)} value={draftName} />
+            </label>
+            <div className="toolbar">
+              <button onClick={savePipeline} type="button">
+                Save
+              </button>
+              {activePipeline?.status === "running" ? (
+                <button className="danger-button" onClick={stopPipeline} type="button">
+                  Stop
+                </button>
+              ) : (
+                <button className="primary-button" onClick={startPipeline} type="button">
+                  Start
+                </button>
+              )}
+              <button
+                className={activePipelineId ? "button-link-export" : "button-link-export disabled"}
+                disabled={!activePipelineId}
+                onClick={exportPipeline}
+                type="button"
+              >
+                Export
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="view-title">
+              <span>Workspace</span>
+              <strong>Credentials</strong>
+            </div>
+            <div className="status-line compact">{message || "Credentials ready"}</div>
+          </>
+        )}
       </header>
 
-      <section className="workspace-strip">
-        <div className="pipeline-tabs">
-          {pipelines.map((pipeline) => (
-            <button
-              className={pipeline.id === activePipelineId ? "active" : ""}
-              key={pipeline.id}
-              onClick={() => loadPipeline(pipeline)}
-              type="button"
-            >
-              <strong>{pipeline.name}</strong>
-              <span>{pipeline.status}</span>
-            </button>
-          ))}
-          <button
-            onClick={() => {
-              setActivePipelineId(null);
-              setDraftName("订单同步管道");
-              setDraftGraph(EMPTY_GRAPH);
-              setSelectedNodeId(null);
-            }}
-            type="button"
-          >
-            <strong>New Pipeline</strong>
-            <span>draft</span>
-          </button>
-        </div>
-        <div className="status-line">{message || "Ready"}</div>
-      </section>
+      {activeView === "builder" ? (
+        <>
+          <section className="workspace-strip">
+            <div className="pipeline-tabs">
+              {pipelines.map((pipeline) => (
+                <button
+                  className={pipeline.id === activePipelineId ? "active" : ""}
+                  key={pipeline.id}
+                  onClick={() => loadPipeline(pipeline)}
+                  type="button"
+                >
+                  <strong>{pipeline.name}</strong>
+                  <span>{pipeline.status}</span>
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setActivePipelineId(null);
+                  setDraftName("订单同步管道");
+                  setDraftGraph(EMPTY_GRAPH);
+                  setSelectedNodeId(null);
+                }}
+                type="button"
+              >
+                <strong>New Pipeline</strong>
+                <span>draft</span>
+              </button>
+            </div>
+            <div className="status-line">{message || "Ready"}</div>
+          </section>
 
-      <PipelineEditor
-        connectors={connectors}
-        credentials={credentials}
-        graph={draftGraph}
-        onGraphChange={setDraftGraph}
-        onSelectedNodeChange={setSelectedNodeId}
-        selectedNodeId={selectedNodeId}
-      />
+          <PipelineEditor
+            connectors={connectors}
+            credentials={credentials}
+            graph={draftGraph}
+            onGraphChange={setDraftGraph}
+            onSelectedNodeChange={setSelectedNodeId}
+            selectedNodeId={selectedNodeId}
+          />
 
-      <section className="lower-grid">
-        <CredentialManager
-          credentials={credentials}
-          onCreate={createCredential}
-          onDelete={deleteCredential}
-          onUpdate={updateCredential}
-        />
-        <LogsPanel pipelineId={activePipelineId} />
-      </section>
+          <section className="lower-grid logs-only">
+            <LogsPanel pipelineId={activePipelineId} />
+          </section>
+        </>
+      ) : (
+        <main className="credentials-page">
+          <CredentialManager
+            credentials={credentials}
+            onCreate={createCredential}
+            onDelete={deleteCredential}
+            onUpdate={updateCredential}
+          />
+        </main>
+      )}
     </div>
   );
 }

@@ -66,7 +66,17 @@ describe("App", () => {
 
     expect(await screen.findByText("OneStep Web")).toBeInTheDocument();
     expect(await screen.findByText("RabbitMQ Source")).toBeInTheDocument();
+    expect(screen.queryByText("Global credentials")).not.toBeInTheDocument();
+  });
+
+  it("opens credentials on a dedicated page", async () => {
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Credentials" }));
+
     expect(await screen.findByText("Global credentials")).toBeInTheDocument();
+    expect(screen.getByLabelText("Host")).toBeInTheDocument();
+    expect(screen.getByLabelText("Database")).toBeInTheDocument();
   });
 
   it("shows node debug controls when a connector is selected", async () => {
@@ -76,6 +86,38 @@ describe("App", () => {
 
     expect(await screen.findByText("Test Connection")).toBeInTheDocument();
     expect(await screen.findByText("Fetch Sample")).toBeInTheDocument();
+  });
+
+  it("creates typed MySQL credentials without manually adding env vars", async () => {
+    const onCreate = vi.fn();
+    const onUpdate = vi.fn();
+    const onDelete = vi.fn();
+
+    render(
+      <CredentialManager
+        credentials={[]}
+        onCreate={onCreate}
+        onDelete={onDelete}
+        onUpdate={onUpdate}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "PROD_MYSQL" } });
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "db.internal" } });
+    fireEvent.change(screen.getByLabelText("Port"), { target: { value: "3307" } });
+    fireEvent.change(screen.getByLabelText("Database"), { target: { value: "orders" } });
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "sync" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByText("Add Credential"));
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalled());
+    expect(onCreate).toHaveBeenCalledWith({
+      name: "PROD_MYSQL",
+      connector_type: "mysql",
+      config: { dsn: "mysql://sync:${PASSWORD}@db.internal:3307/orders" },
+      env_vars: { PASSWORD: "secret" }
+    });
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 
   it("edits and deletes credentials from the credential manager", async () => {
@@ -104,9 +146,10 @@ describe("App", () => {
 
     fireEvent.click(screen.getByText("Edit"));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "DEV_RABBITMQ" } });
+    fireEvent.click(screen.getByText("Advanced environment variables"));
     fireEvent.click(screen.getByText("Add Env Var"));
-    fireEvent.change(screen.getByLabelText("Env key 2"), { target: { value: "TOKEN" } });
-    fireEvent.change(screen.getByLabelText("Env value 2"), { target: { value: "new-token" } });
+    fireEvent.change(screen.getByLabelText("Env key 1"), { target: { value: "TOKEN" } });
+    fireEvent.change(screen.getByLabelText("Env value 1"), { target: { value: "new-token" } });
     fireEvent.click(screen.getByText("Update Credential"));
 
     await waitFor(() => expect(onUpdate).toHaveBeenCalled());
@@ -115,7 +158,7 @@ describe("App", () => {
       expect.objectContaining({
         name: "DEV_RABBITMQ",
         connector_type: "rabbitmq",
-        config: { url: "amqp://user:${PASSWORD}@host:5672/" },
+        config: { url: "amqp://user:${PASSWORD}@host:5672/%2F" },
         env_vars: { PASSWORD: "********", TOKEN: "new-token" }
       })
     );

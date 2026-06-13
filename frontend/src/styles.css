@@ -50,11 +50,25 @@ button,
   justify-content: center;
   gap: 8px;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
 }
 
 button:hover,
 .button-link-export:hover {
   border-color: var(--ink);
+  box-shadow: 3px 3px 0 rgb(22 23 18 / 10%);
+  transform: translateY(-1px);
+}
+
+button:active,
+.button-link-export:active {
+  box-shadow: none;
+  transform: translateY(0);
 }
 
 .primary-button {
@@ -81,7 +95,7 @@ button:hover,
 .top-bar {
   height: 72px;
   display: grid;
-  grid-template-columns: 280px 1fr auto;
+  grid-template-columns: 280px auto minmax(260px, 1fr) auto;
   align-items: center;
   gap: 16px;
   border: 1px solid var(--line);
@@ -125,6 +139,52 @@ button:hover,
 .pipeline-name {
   display: grid;
   gap: 4px;
+}
+
+.top-nav {
+  height: 42px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+}
+
+.top-nav button {
+  min-width: 118px;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  transform: none;
+}
+
+.top-nav button.active {
+  background: var(--ink);
+  color: #fff;
+}
+
+.top-nav button:hover {
+  box-shadow: inset 0 0 0 1px var(--ink);
+  transform: none;
+}
+
+.top-nav button.active:hover {
+  box-shadow: none;
+}
+
+.view-title {
+  display: grid;
+  gap: 4px;
+}
+
+.view-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.view-title strong {
+  font-size: 22px;
 }
 
 .pipeline-name input {
@@ -179,6 +239,11 @@ button:hover,
   display: flex;
   align-items: center;
   padding: 0 12px;
+}
+
+.status-line.compact {
+  min-height: 42px;
+  justify-content: flex-end;
 }
 
 .builder-grid {
@@ -371,6 +436,20 @@ button:hover,
   background: #fff;
   min-height: 36px;
   padding: 8px;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.env-var-row input:focus,
+.mapping-cell input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(47 109 246 / 14%);
+  outline: none;
 }
 
 .field textarea {
@@ -620,16 +699,61 @@ button:hover,
   margin-top: 12px;
 }
 
+.lower-grid.logs-only {
+  grid-template-columns: 1fr;
+}
+
+.credentials-page {
+  margin-top: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-strip,
+  .builder-grid,
+  .lower-grid,
+  .credentials-page {
+    animation: workspace-enter 180ms ease-out both;
+  }
+}
+
+@keyframes workspace-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .credential-manager,
 .logs-panel {
   min-height: 210px;
   padding: 14px;
 }
 
+.credential-page {
+  min-height: calc(100vh - 112px);
+}
+
+.credential-page-heading {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.credential-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(520px, 1fr);
+  gap: 18px;
+}
+
 .credential-list {
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
+  align-content: start;
 }
 
 .credential-row,
@@ -640,6 +764,37 @@ button:hover,
   align-items: center;
   border-top: 1px solid var(--line);
   padding: 8px 0;
+}
+
+.credential-row {
+  min-height: 56px;
+}
+
+.credential-workspace .credential-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px 10px;
+}
+
+.credential-workspace .credential-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.credential-workspace .credential-row span {
+  color: var(--muted);
+}
+
+.credential-workspace .credential-row code {
+  grid-column: 1;
+  font-size: 11px;
+}
+
+.credential-workspace .credential-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 .credential-actions {
@@ -656,20 +811,61 @@ button:hover,
 
 .credential-form {
   display: grid;
-  grid-template-columns: 1fr 140px 180px auto;
-  gap: 10px;
+  gap: 14px;
+  align-content: start;
+  border-left: 1px solid var(--line);
+  padding-left: 18px;
+}
+
+.credential-form-topline,
+.connector-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 12px;
   align-items: end;
 }
 
-.credential-form .span-2 {
-  grid-column: span 1;
+.span-full {
+  grid-column: 1 / -1;
+}
+
+.check-field {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.check-field input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.credential-advanced {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.credential-advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.credential-submit-row {
+  display: flex;
+  gap: 8px;
 }
 
 .env-var-editor {
-  grid-column: 1 / -1;
   display: grid;
   gap: 8px;
-  border-top: 1px solid var(--line);
   padding-top: 10px;
 }
 
@@ -727,9 +923,18 @@ button:hover,
   .workspace-strip,
   .builder-grid,
   .lower-grid,
-  .credential-form {
+  .credential-workspace,
+  .credential-form-topline,
+  .connector-fields {
     grid-template-columns: 1fr;
     height: auto;
+  }
+
+  .credential-form {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    padding-top: 14px;
   }
 
   .canvas-shell {
