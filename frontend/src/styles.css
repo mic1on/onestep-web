@@ -663,6 +663,14 @@ button:active,
   justify-content: flex-end;
 }
 
+.debug-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .debug-result {
   border: 1px solid var(--line);
   background: #fff;

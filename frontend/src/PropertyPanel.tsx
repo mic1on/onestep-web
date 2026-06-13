@@ -121,8 +121,18 @@ export function PropertyPanel({
   const matchingCredentials = credentials.filter((credential) =>
     activeConnector.credential_type ? credential.connector_type === activeConnector.credential_type : true
   );
+  const needsConfiguredSample = requiresConfiguredSamplePayload(activeNode);
+  const missingConfiguredSample = needsConfiguredSample && !hasConfiguredSamplePayload(activeNode);
+  const sampleHint = needsConfiguredSample
+    ? missingConfiguredSample
+      ? `${activeConnector.label} samples require Sample Payload JSON because peeking a live queue can mutate queue state.`
+      : "Fetch Sample uses Sample Payload JSON and does not read from the live queue."
+    : null;
 
   async function fetchSample() {
+    if (missingConfiguredSample) {
+      return;
+    }
     setDebugBusy("sample");
     try {
       const result = await api.fetchSample(activeNode, 5);
@@ -179,20 +189,19 @@ export function PropertyPanel({
             </select>
           </label>
           {activeConnector.fields.map((field) => (
-            <label className="field" key={field.name}>
-              <span>{field.label}</span>
-              <input
-                onChange={(event) => setConfig(field, event.target.value)}
-                required={field.required}
-                type={field.type === "number" ? "number" : "text"}
-                value={String(activeNode.config[field.name] ?? "")}
-              />
-            </label>
+            <ConfigField
+              field={field}
+              key={field.name}
+              onChange={(value) => setConfig(field, value)}
+              value={String(activeNode.config[field.name] ?? "")}
+            />
           ))}
           <DebugActions
             busy={debugBusy}
+            disabled={missingConfiguredSample}
             onFetchSample={fetchSample}
             sampleResult={sampleResult}
+            sampleHint={sampleHint}
           />
         </section>
       ) : (
@@ -381,13 +390,50 @@ function VisualMappingEditor({
   );
 }
 
+function ConfigField({
+  field,
+  value,
+  onChange
+}: {
+  field: ConnectorDescriptor["fields"][number];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const jsonField = field.name === "sample_payload" || field.label.includes("JSON");
+  return (
+    <label className="field">
+      <span>{field.label}</span>
+      {jsonField ? (
+        <textarea
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={field.name === "sample_payload" ? '{"order_id":"A001"}' : undefined}
+          required={field.required}
+          rows={4}
+          value={value}
+        />
+      ) : (
+        <input
+          onChange={(event) => onChange(event.target.value)}
+          required={field.required}
+          type={field.type === "number" ? "number" : "text"}
+          value={value}
+        />
+      )}
+    </label>
+  );
+}
+
 function DebugActions({
   busy,
+  disabled,
   sampleResult,
+  sampleHint,
   onFetchSample
 }: {
   busy: string | null;
+  disabled: boolean;
   sampleResult: DebugResult | null;
+  sampleHint: string | null;
   onFetchSample: () => void;
 }) {
   return (
@@ -395,11 +441,12 @@ function DebugActions({
       <div className="debug-heading">
         <h3>Debug</h3>
         <div className="debug-actions">
-          <button disabled={busy === "sample"} onClick={onFetchSample} type="button">
+          <button disabled={busy === "sample" || disabled} onClick={onFetchSample} type="button">
             {busy === "sample" ? "Fetching" : "Fetch Sample"}
           </button>
         </div>
       </div>
+      {sampleHint ? <p className="debug-hint">{sampleHint}</p> : null}
       <DebugResultView result={sampleResult} />
     </div>
   );
@@ -449,6 +496,18 @@ function samplePayload(value: unknown): unknown {
     return value[0] ?? null;
   }
   return value ?? null;
+}
+
+function requiresConfiguredSamplePayload(node: GraphNode): boolean {
+  return node.type === "rabbitmq_source" || node.type === "sqs_source";
+}
+
+function hasConfiguredSamplePayload(node: GraphNode): boolean {
+  const samplePayloadValue = node.config.sample_payload;
+  if (typeof samplePayloadValue === "string") {
+    return samplePayloadValue.trim().length > 0;
+  }
+  return samplePayloadValue !== null && samplePayloadValue !== undefined;
 }
 
 function collectFieldEntries(value: unknown): FieldEntry[] {
