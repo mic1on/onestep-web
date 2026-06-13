@@ -185,10 +185,12 @@ def _connection_spec(
     if family == "redis":
         return {"type": "redis", "url": _first_config_value(raw_config, "url", "dsn")}
     if family == "sqs":
-        return {
+        spec = {
             "type": "sqs",
             "region_name": raw_config.get("region_name", "${AWS_REGION:-us-east-1}"),
         }
+        _copy_optional(spec, raw_config, "options")
+        return spec
     if family == "feishu_bitable":
         return {"type": "feishu_bitable", **raw_config}
     return None
@@ -235,7 +237,7 @@ def _connector_node_spec(node: GraphNode, family: str, connection_name: str) -> 
             "mode": config.get("mode", "insert"),
         }
         if "keys" in config:
-            spec["keys"] = config["keys"]
+            spec["keys"] = _string_list(config["keys"])
         return spec
     if family == "redis":
         spec = {
@@ -254,11 +256,34 @@ def _connector_node_spec(node: GraphNode, family: str, connection_name: str) -> 
         _copy_optional(spec, config, "wait_time_s", "visibility_timeout")
         return spec
     if family == "feishu_bitable":
-        return {
-            "type": node.type,
+        if _node_kind(node) == "source":
+            return {
+                "type": "feishu_bitable_incremental",
+                "connector": connection_name,
+                "app_token": config.get("app_token", "${FEISHU_APP_TOKEN}"),
+                "table_id": config.get("table_id", "${FEISHU_TABLE_ID}"),
+                "cursor_field": config.get("cursor_field", "updated_at"),
+                **_only_present(
+                    config,
+                    "batch_size",
+                    "poll_interval_s",
+                    "fallback_scan_page_limit",
+                    "state",
+                    "state_key",
+                    "user_id_type",
+                ),
+            }
+        spec = {
+            "type": "feishu_bitable_table_sink",
             "connector": connection_name,
-            **config,
+            "app_token": config.get("app_token", "${FEISHU_APP_TOKEN}"),
+            "table_id": config.get("table_id", "${FEISHU_TABLE_ID}"),
+            "mode": config.get("mode", "upsert"),
+            **_only_present(config, "user_id_type"),
         }
+        if "match_fields" in config:
+            spec["match_fields"] = _string_list(config["match_fields"])
+        return spec
     raise PipelineCompileError(f"node type {node.type} is not mapped to a OneStep resource")
 
 
@@ -305,7 +330,7 @@ def _builtin_resource_spec(node: GraphNode) -> dict[str, Any]:
         spec = {
             "type": "webhook",
             "path": config.get("path", f"/webhooks/{node.id}"),
-            "methods": config.get("methods", ["POST"]),
+            "methods": _string_list(config.get("methods", ["POST"])),
         }
         _copy_optional(
             spec,
@@ -381,6 +406,7 @@ def _connection_config(node: GraphNode, credentials: dict[str, dict[str, Any]]) 
         "token",
         "app_id",
         "app_secret",
+        "options",
     }
     return {key: value for key, value in node.config.items() if key in keys}
 
@@ -519,3 +545,15 @@ def _copy_optional(target: dict[str, Any], source: Mapping[str, Any], *keys: str
     for key in keys:
         if key in source and source[key] is not None:
             target[key] = source[key]
+
+
+def _only_present(source: Mapping[str, Any], *keys: str) -> dict[str, Any]:
+    return {key: source[key] for key in keys if key in source and source[key] is not None}
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value).strip()] if str(value).strip() else []

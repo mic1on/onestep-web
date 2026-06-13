@@ -52,8 +52,16 @@ export function PropertyPanel({
     onChange({ ...activeNode, ...partial });
   }
 
-  function setConfig(name: string, value: string) {
-    patch({ config: { ...activeNode.config, [name]: value } });
+  function setConfig(field: ConnectorDescriptor["fields"][number], value: string) {
+    const config = { ...activeNode.config };
+    if (!value.trim()) {
+      delete config[field.name];
+    } else if (field.type === "number") {
+      config[field.name] = Number(value);
+    } else {
+      config[field.name] = value;
+    }
+    patch({ config });
   }
 
   function updateMapping(raw: string) {
@@ -149,7 +157,7 @@ export function PropertyPanel({
             <label className="field" key={field.name}>
               <span>{field.label}</span>
               <input
-                onChange={(event) => setConfig(field.name, event.target.value)}
+                onChange={(event) => setConfig(field, event.target.value)}
                 required={field.required}
                 type={field.type === "number" ? "number" : "text"}
                 value={String(activeNode.config[field.name] ?? "")}

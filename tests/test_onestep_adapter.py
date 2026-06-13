@@ -56,6 +56,64 @@ def test_build_onestep_config_is_strict_valid_for_builtin_resources() -> None:
     validate_app_config(config)
 
 
+def test_build_onestep_config_preserves_sqs_options() -> None:
+    config = build_onestep_config(
+        "sqs orders",
+        PipelineGraph.model_validate(
+            {
+                "nodes": [
+                    {
+                        "id": "orders",
+                        "type": "sqs_source",
+                        "kind": "source",
+                        "credential_ref": "PROD_SQS",
+                        "config": {"url": "https://sqs.us-east-1.amazonaws.com/123/orders"},
+                    },
+                    {
+                        "id": "notify",
+                        "type": "http_sink",
+                        "kind": "sink",
+                        "config": {"url": "https://example.com/orders"},
+                    },
+                ],
+                "edges": [
+                    {
+                        "from": "orders",
+                        "to": "notify",
+                    },
+                ],
+            }
+        ),
+        handler_module="worker.handlers",
+        credentials={
+            "PROD_SQS": {
+                "connector_type": "sqs",
+                "config": {
+                    "region_name": "us-east-1",
+                    "options": {
+                        "aws_access_key_id": "${ACCESS_KEY_ID}",
+                        "aws_secret_access_key": "${SECRET_ACCESS_KEY}",
+                    },
+                },
+                "env_vars": {
+                    "ACCESS_KEY_ID": "test-key",
+                    "SECRET_ACCESS_KEY": "test-secret",
+                },
+            },
+        },
+        runtime=False,
+    )
+
+    assert config["resources"]["cred_PROD_SQS"] == {
+        "type": "sqs",
+        "region_name": "us-east-1",
+        "options": {
+            "aws_access_key_id": "${PROD_SQS_ACCESS_KEY_ID}",
+            "aws_secret_access_key": "${PROD_SQS_SECRET_ACCESS_KEY}",
+        },
+    }
+
+
 async def test_build_runtime_app_returns_real_onestep_app() -> None:
     events: list[tuple[str, str, str]] = []
 
