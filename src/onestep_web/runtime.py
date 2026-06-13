@@ -35,8 +35,6 @@ class PipelineRuntimePool:
         credentials: dict[str, dict],
         log: LogSink,
     ) -> RuntimeStatus:
-        if pipeline_id in self._tasks:
-            await self.stop(pipeline_id, log)
         compiled = self.compiler.compile(graph, credentials)
         app, module_name = build_runtime_app(
             pipeline_id,
@@ -45,6 +43,8 @@ class PipelineRuntimePool:
             credentials=credentials,
             log=log,
         )
+        if pipeline_id in self._tasks:
+            await self.stop(pipeline_id, log)
         await log("started", "runtime", f"compiled pipeline order: {', '.join(compiled.order)}")
         task = asyncio.create_task(app.serve())
         task.add_done_callback(
@@ -86,8 +86,10 @@ class PipelineRuntimePool:
         credentials: dict[str, dict],
         log: LogSink,
     ) -> RuntimeStatus:
-        await self.stop(pipeline_id, log)
         return await self.start(pipeline_id, graph, credentials, log)
+
+    def running_ids(self) -> list[str]:
+        return list(self._tasks)
 
     def get_status(self, pipeline_id: str) -> RuntimeStatus:
         handle = self._tasks.get(pipeline_id)

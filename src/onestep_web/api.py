@@ -61,7 +61,9 @@ def create_api(db: Database | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.onestep_web = state
         await app_db.init()
+        await _reconcile_runtime_state(state)
         yield
+        await _stop_local_runtimes(state)
         await app_db.dispose()
 
     app = FastAPI(title="OneStep Web", lifespan=lifespan)
@@ -141,16 +143,31 @@ def create_api(db: Database | None = None) -> FastAPI:
         pipeline_id: str,
         request: PipelineUpdate,
         session: AsyncSession = Depends(session_dep),
+        state: AppState = Depends(app_state),
     ) -> PipelineRead:
         pipeline = await _get_pipeline(session, pipeline_id)
+        restart_result: RuntimeStatus | None = None
+        if pipeline.status == "running" and request.graph is not None:
+            try:
+                restart_result = await state.runtime.restart(
+                    pipeline.id,
+                    request.graph,
+                    await _credential_map(session, state),
+                    _runtime_log_writer(state, pipeline.id),
+                )
+            except PipelineCompileError as exc:
+                await _append_log(session, state, pipeline.id, "failed", "compiler", str(exc))
+                await session.commit()
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
         if request.name is not None:
             pipeline.name = request.name
         if request.description is not None:
             pipeline.description = request.description
         if request.graph is not None:
             pipeline.graph_json = request.graph.model_dump(by_alias=True)
-            if pipeline.status == "running":
-                pipeline.status = "stopped"
+        if restart_result is not None:
+            pipeline.status = restart_result.status
         pipeline.updated_at = utcnow()
         await session.commit()
         await session.refresh(pipeline)
@@ -378,6 +395,35 @@ async def _credential_map(session: AsyncSession, state: AppState) -> dict[str, d
         }
         for row in rows
     }
+
+
+async def _reconcile_runtime_state(state: AppState) -> None:
+    async for session in state.db.session():
+        rows = (
+            await session.scalars(
+                select(Pipeline)
+                .where(Pipeline.status == "running")
+                .order_by(Pipeline.updated_at.asc())
+            )
+        ).all()
+        for pipeline in rows:
+            pipeline.status = "stopped"
+            pipeline.updated_at = utcnow()
+            await _append_log(
+                session,
+                state,
+                pipeline.id,
+                "stopped",
+                "runtime",
+                "pipeline marked stopped after Web server restart",
+            )
+        await session.commit()
+        return
+
+
+async def _stop_local_runtimes(state: AppState) -> None:
+    for pipeline_id in state.runtime.running_ids():
+        await state.runtime.stop(pipeline_id, _runtime_log_writer(state, pipeline_id))
 
 
 def _log_writer(session: AsyncSession, state: AppState, pipeline_id: str):
