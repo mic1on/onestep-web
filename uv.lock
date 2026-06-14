@@ -528,9 +528,39 @@ wheels = [
 ]
 
 [[package]]
+name = "mysql-replication"
+version = "1.0.15"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pymysql" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/bb/1d2f295f3d14def732003fe5c2d21408a5c6a907a9598bd195dc017a397e/mysql_replication-1.0.15.tar.gz", hash = "sha256:c13c8b6f56c07f234b96f7b34dc0989ab80af677eaeb1f968a2e2f0ebe12e1eb", size = 74399, upload-time = "2026-02-07T11:55:19.456Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/94/4b/3bd715ef7c597d88d35a997adff0c9cc6d230a915327739aaeac79ac87fd/mysql_replication-1.0.15-py3-none-any.whl", hash = "sha256:2e38eb75442f0ba54fd82565b1902e1e6347b903e1f080978cbefb991f2d0087", size = 82935, upload-time = "2026-02-07T11:55:17.878Z" },
+]
+
+[[package]]
 name = "onestep"
 version = "1.4.2"
 source = { editable = "../onestep" }
+
+[package.optional-dependencies]
+mysql = [
+    { name = "onestep-mysql" },
+]
+rabbitmq = [
+    { name = "onestep-mq" },
+]
+redis = [
+    { name = "onestep-redis" },
+]
+sqs = [
+    { name = "onestep-sqs" },
+]
+yaml = [
+    { name = "pyyaml" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -568,6 +598,84 @@ requires-dist = [
 provides-extras = ["control-plane", "yaml", "mysql", "rabbitmq", "redis", "sqs", "test", "integration", "all", "dev"]
 
 [[package]]
+name = "onestep-mq"
+version = "0.2.0"
+source = { editable = "../onestep/plugins/onestep-rabbitmq" }
+dependencies = [
+    { name = "aio-pika" },
+    { name = "onestep" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aio-pika", specifier = ">=9.0.0" },
+    { name = "onestep", editable = "../onestep" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
+]
+provides-extras = ["test", "dev"]
+
+[[package]]
+name = "onestep-mysql"
+version = "0.3.0"
+source = { editable = "../onestep/plugins/onestep-mysql" }
+dependencies = [
+    { name = "mysql-replication" },
+    { name = "onestep" },
+    { name = "pymysql" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mysql-replication", specifier = ">=1.0.15" },
+    { name = "onestep", editable = "../onestep" },
+    { name = "pymysql", specifier = ">=1.1.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+]
+provides-extras = ["test", "dev"]
+
+[[package]]
+name = "onestep-redis"
+version = "0.2.0"
+source = { editable = "../onestep/plugins/onestep-redis" }
+dependencies = [
+    { name = "onestep" },
+    { name = "redis" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "onestep", editable = "../onestep" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23.0" },
+    { name = "redis", specifier = ">=4.2.0" },
+]
+provides-extras = ["test", "dev"]
+
+[[package]]
+name = "onestep-sqs"
+version = "0.2.0"
+source = { editable = "../onestep/plugins/onestep-sqs" }
+dependencies = [
+    { name = "boto3" },
+    { name = "onestep" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "boto3", specifier = ">=1.34.0" },
+    { name = "onestep", editable = "../onestep" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
+]
+provides-extras = ["test", "dev"]
+
+[[package]]
 name = "onestep-web"
 version = "0.1.0"
 source = { editable = "." }
@@ -580,7 +688,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "greenlet" },
     { name = "httpx" },
-    { name = "onestep" },
+    { name = "onestep", extra = ["mysql", "rabbitmq", "redis", "sqs", "yaml"] },
     { name = "pydantic" },
     { name = "python-multipart" },
     { name = "pyyaml" },
@@ -608,7 +716,7 @@ requires-dist = [
     { name = "greenlet", specifier = ">=3.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27.0" },
-    { name = "onestep", editable = "../onestep" },
+    { name = "onestep", extras = ["mysql", "rabbitmq", "redis", "sqs", "yaml"], editable = "../onestep" },
     { name = "pydantic", specifier = ">=2.8.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },

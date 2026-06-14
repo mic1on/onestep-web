@@ -38,10 +38,12 @@ def test_build_onestep_config_maps_connectors_and_edges() -> None:
     assert resources["node_n3"]["type"] == "mysql_table_sink"
     assert resources["node_n3"]["connector"] == "cred_PROD_MYSQL"
     assert resources["node_n3"]["keys"] == ["id"]
+    assert resources["cred_PROD_MYSQL"]["dsn"] == "mysql+pymysql://user:${PROD_MYSQL_PASSWORD}@host/db"
     assert config["tasks"][0]["source"] == "node_n1"
     assert config["tasks"][0]["emit"] == ["edge_n1__n2"]
     assert config["tasks"][1]["handler"]["ref"] == "worker.handlers:handler_n2"
     assert config["tasks"][2]["emit"] == ["node_n3"]
+    validate_app_config(config)
 
 
 def test_build_onestep_config_is_strict_valid_for_builtin_resources() -> None:

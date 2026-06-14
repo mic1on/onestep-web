@@ -195,7 +195,7 @@ def _connection_spec(
     if family == "rabbitmq":
         return {"type": "rabbitmq", "url": _first_config_value(raw_config, "url", "dsn")}
     if family == "mysql":
-        return {"type": "mysql", "dsn": _first_config_value(raw_config, "dsn", "url")}
+        return {"type": "mysql", "dsn": _sync_mysql_dsn(_first_config_value(raw_config, "dsn", "url"))}
     if family == "redis":
         return {"type": "redis", "url": _first_config_value(raw_config, "url", "dsn")}
     if family == "sqs":
@@ -563,6 +563,12 @@ def _first_config_value(config: Mapping[str, Any], *keys: str) -> Any:
         if value:
             return value
     return "${" + keys[0].upper() + "}"
+
+
+def _sync_mysql_dsn(dsn: Any) -> Any:
+    if isinstance(dsn, str) and dsn.startswith("mysql://"):
+        return "mysql+pymysql://" + dsn.removeprefix("mysql://")
+    return dsn
 
 
 def _copy_optional(target: dict[str, Any], source: Mapping[str, Any], *keys: str) -> None:
