@@ -167,6 +167,61 @@ describe("App", () => {
     });
   });
 
+  it("deletes the active pipeline and loads the next saved pipeline", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/pipelines/pipe_1") && init?.method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
+      if (url.endsWith("/api/pipelines")) {
+        return Response.json({
+          items: [
+            {
+              id: "pipe_1",
+              name: "Old pipeline",
+              description: "",
+              graph: { nodes: [], edges: [] },
+              status: "draft",
+              created_at: "2026-06-13T00:00:00Z",
+              updated_at: "2026-06-13T00:00:00Z"
+            },
+            {
+              id: "pipe_2",
+              name: "Next pipeline",
+              description: "",
+              graph: { nodes: [], edges: [] },
+              status: "draft",
+              created_at: "2026-06-13T00:00:00Z",
+              updated_at: "2026-06-13T00:00:00Z"
+            }
+          ]
+        });
+      }
+      if (url.endsWith("/api/connectors")) {
+        return Response.json({ items: [] });
+      }
+      if (url.endsWith("/api/credentials")) {
+        return Response.json({ items: [] });
+      }
+      if (url.includes("/logs")) {
+        return Response.json([]);
+      }
+      return Response.json({});
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+
+    expect(await screen.findByDisplayValue("Old pipeline")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/pipelines/pipe_1", { method: "DELETE" });
+    });
+    expect(await screen.findByDisplayValue("Next pipeline")).toBeInTheDocument();
+    expect(screen.getByText("Deleted pipeline")).toBeInTheDocument();
+  });
+
   it("creates typed MySQL credentials without manually adding env vars", async () => {
     const onCreate = vi.fn();
     const onUpdate = vi.fn();

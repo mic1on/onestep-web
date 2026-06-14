@@ -6,6 +6,7 @@ import { PipelineEditor, validatePipelineGraphConditions } from "./PipelineEdito
 import type { ConnectorDescriptor, Credential, Pipeline, PipelineGraph } from "./types";
 
 const EMPTY_GRAPH: PipelineGraph = { nodes: [], edges: [] };
+const DEFAULT_PIPELINE_NAME = "订单同步管道";
 type AppView = "builder" | "credentials";
 
 export function App() {
@@ -13,7 +14,7 @@ export function App() {
   const [connectors, setConnectors] = useState<ConnectorDescriptor[]>([]);
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [activePipelineId, setActivePipelineId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState("订单同步管道");
+  const [draftName, setDraftName] = useState(DEFAULT_PIPELINE_NAME);
   const [draftGraph, setDraftGraph] = useState<PipelineGraph>(EMPTY_GRAPH);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -89,6 +90,29 @@ export function App() {
     const status = await api.stopPipeline(activePipelineId);
     await refresh();
     setMessage(status.message);
+  }
+
+  async function deletePipeline() {
+    if (!activePipelineId) {
+      return;
+    }
+    const deletedId = activePipelineId;
+    const deletedIndex = pipelines.findIndex((pipeline) => pipeline.id === deletedId);
+    await api.deletePipeline(deletedId);
+    const remaining = pipelines.filter((pipeline) => pipeline.id !== deletedId);
+    setPipelines(remaining);
+    const nextPipeline = remaining[Math.min(Math.max(deletedIndex, 0), remaining.length - 1)] ?? null;
+    if (nextPipeline) {
+      setActivePipelineId(nextPipeline.id);
+      setDraftName(nextPipeline.name);
+      setDraftGraph(nextPipeline.graph);
+    } else {
+      setActivePipelineId(null);
+      setDraftName(DEFAULT_PIPELINE_NAME);
+      setDraftGraph(EMPTY_GRAPH);
+    }
+    setSelectedNodeId(null);
+    setMessage("Deleted pipeline");
   }
 
   async function createCredential(input: Parameters<typeof api.createCredential>[0]) {
@@ -183,6 +207,14 @@ export function App() {
               >
                 Export
               </button>
+              <button
+                className="danger-button"
+                disabled={!activePipelineId}
+                onClick={deletePipeline}
+                type="button"
+              >
+                Delete
+              </button>
             </div>
           </>
         ) : (
@@ -214,7 +246,7 @@ export function App() {
               <button
                 onClick={() => {
                   setActivePipelineId(null);
-                  setDraftName("订单同步管道");
+                  setDraftName(DEFAULT_PIPELINE_NAME);
                   setDraftGraph(EMPTY_GRAPH);
                   setSelectedNodeId(null);
                 }}

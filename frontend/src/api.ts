@@ -38,6 +38,12 @@ export const api = {
       body: JSON.stringify(input)
     });
   },
+  async deletePipeline(id: string): Promise<void> {
+    const response = await fetch(`/api/pipelines/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+  },
   async startPipeline(id: string): Promise<RuntimeStatus> {
     return request<RuntimeStatus>(`/api/pipelines/${id}/start`, { method: "POST" });
   },
