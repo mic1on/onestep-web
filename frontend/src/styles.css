@@ -296,6 +296,11 @@ button:active,
   gap: 4px;
   padding: 10px;
   background: #fff;
+  cursor: grab;
+}
+
+.palette-node:active {
+  cursor: grabbing;
 }
 
 .palette-node span {

@@ -4,6 +4,7 @@ import {
   disconnectGraphNode,
   duplicateGraphNode,
   handlesForNodeKind,
+  nextGraphNodeId,
   nextNodePosition,
   removeGraphNode,
   validateConditionExpression,
@@ -98,6 +99,12 @@ describe("connection affordances", () => {
       x: 40,
       y: 320
     });
+  });
+
+  it("generates unique node ids after prior additions or deletions", () => {
+    const graph = graphWithNodes(source("n1"), handler("n3"));
+
+    expect(nextGraphNodeId(graph)).toBe("n4");
   });
 });
 

@@ -10,6 +10,7 @@ import {
   Position,
   ReactFlow,
   type Connection,
+  type ReactFlowInstance,
   type Edge,
   type EdgeChange,
   Handle,
@@ -23,11 +24,12 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type SyntheticEvent
 } from "react";
 import type { ConnectorDescriptor, Credential, GraphEdge, GraphNode, PipelineGraph } from "./types";
-import { NodePalette } from "./NodePalette";
+import { NODE_PALETTE_CONNECTOR_MIME, NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
 
 type ConnectionHandles = {
@@ -76,6 +78,7 @@ export function PipelineEditor({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu | null>(null);
   const canvasRef = useRef<HTMLElement | null>(null);
+  const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedConnector = selectedNode
     ? connectors.find((connector) => connector.type === selectedNode.type) ?? null
@@ -319,19 +322,22 @@ export function PipelineEditor({
     updateSelectedEdgeCondition(current ? `${current} and ${fieldName} == ""` : `${fieldName} == ""`);
   }, [selectedGraphEdge, updateSelectedEdgeCondition]);
 
-  const addConnectorNode = useCallback((connector: ConnectorDescriptor) => {
-    const count = graph.nodes.length + 1;
+  const addConnectorNodeAt = useCallback((connector: ConnectorDescriptor, position: { x: number; y: number }) => {
     const nextNode = createGraphNode(
-      `n${count}`,
+      nextGraphNodeId(graph),
       connector.type,
       connector.category,
-      nextNodePosition(graph, connector.category)
+      position
     );
     onGraphChange({ ...graph, nodes: [...graph.nodes, nextNode] });
     setConnectionError("");
     setSelectedEdgeId(null);
     onSelectedNodeChange(nextNode.id);
   }, [graph, onGraphChange, onSelectedNodeChange]);
+
+  const addConnectorNode = useCallback((connector: ConnectorDescriptor) => {
+    addConnectorNodeAt(connector, nextNodePosition(graph, connector.category));
+  }, [addConnectorNodeAt, graph]);
 
   const updateNode = useCallback((node: GraphNode) => {
     onGraphChange({
@@ -367,6 +373,33 @@ export function PipelineEditor({
     event.preventDefault();
     setContextMenu(null);
   }, []);
+
+  const handleCanvasDragOver = useCallback((event: ReactDragEvent) => {
+    if (!event.dataTransfer.types.includes(NODE_PALETTE_CONNECTOR_MIME)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleCanvasDrop = useCallback((event: ReactDragEvent) => {
+    const connectorType =
+      event.dataTransfer.getData(NODE_PALETTE_CONNECTOR_MIME) || event.dataTransfer.getData("text/plain");
+    if (!connectorType) {
+      return;
+    }
+    const connector = connectors.find((item) => item.type === connectorType);
+    const flow = flowInstanceRef.current;
+    if (!connector || !flow) {
+      return;
+    }
+    event.preventDefault();
+    const flowPosition = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    addConnectorNodeAt(connector, {
+      x: flowPosition.x - PIPELINE_NODE_WIDTH / 2,
+      y: flowPosition.y - PIPELINE_NODE_HEIGHT / 2
+    });
+  }, [addConnectorNodeAt, connectors]);
 
   const openContextMenu = useCallback(
     (event: ReactMouseEvent, target: CanvasContextMenu["target"], id: string) => {
@@ -534,9 +567,14 @@ export function PipelineEditor({
           nodeTypes={PIPELINE_NODE_TYPES}
           nodes={nodes}
           onConnect={handleConnect}
+          onDragOver={handleCanvasDragOver}
+          onDrop={handleCanvasDrop}
           onEdgesChange={handleEdgesChange}
           onEdgeClick={handleEdgeClick}
           onEdgeContextMenu={handleEdgeContextMenu}
+          onInit={(instance) => {
+            flowInstanceRef.current = instance;
+          }}
           onNodeClick={handleNodeClick}
           onNodeContextMenu={handleNodeContextMenu}
           onNodesChange={handleNodesChange}
@@ -803,6 +841,17 @@ export function nextNodePosition(graph: PipelineGraph, kind: GraphNode["kind"]):
     x: columnX,
     y: 80 + row * 120
   };
+}
+
+export function nextGraphNodeId(graph: PipelineGraph): string {
+  const existingIds = new Set(graph.nodes.map((node) => node.id));
+  let index = graph.nodes.length + 1;
+  let candidate = `n${index}`;
+  while (existingIds.has(candidate)) {
+    index += 1;
+    candidate = `n${index}`;
+  }
+  return candidate;
 }
 
 function createGraphNode(id: string, type: string, kind: GraphNode["kind"], position: { x: number; y: number }): GraphNode {
