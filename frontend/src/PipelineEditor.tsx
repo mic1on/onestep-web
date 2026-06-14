@@ -77,6 +77,7 @@ export function PipelineEditor({
   const [connectionError, setConnectionError] = useState("");
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu | null>(null);
+  const [recentConnectorTypes, setRecentConnectorTypes] = useState(readRecentConnectorTypes);
   const canvasRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
@@ -322,6 +323,14 @@ export function PipelineEditor({
     updateSelectedEdgeCondition(current ? `${current} and ${fieldName} == ""` : `${fieldName} == ""`);
   }, [selectedGraphEdge, updateSelectedEdgeCondition]);
 
+  const rememberConnectorType = useCallback((connectorType: string) => {
+    setRecentConnectorTypes((current) => {
+      const next = [connectorType, ...current.filter((type) => type !== connectorType)].slice(0, 5);
+      writeRecentConnectorTypes(next);
+      return next;
+    });
+  }, []);
+
   const addConnectorNodeAt = useCallback((connector: ConnectorDescriptor, position: { x: number; y: number }) => {
     const nextNode = createGraphNode(
       nextGraphNodeId(graph),
@@ -332,8 +341,9 @@ export function PipelineEditor({
     onGraphChange({ ...graph, nodes: [...graph.nodes, nextNode] });
     setConnectionError("");
     setSelectedEdgeId(null);
+    rememberConnectorType(connector.type);
     onSelectedNodeChange(nextNode.id);
-  }, [graph, onGraphChange, onSelectedNodeChange]);
+  }, [graph, onGraphChange, onSelectedNodeChange, rememberConnectorType]);
 
   const addConnectorNode = useCallback((connector: ConnectorDescriptor) => {
     addConnectorNodeAt(connector, nextNodePosition(graph, connector.category));
@@ -450,7 +460,7 @@ export function PipelineEditor({
 
   return (
     <main className="builder-grid">
-      <NodePalette connectors={connectors} onAddNode={addConnectorNode} />
+      <NodePalette connectors={connectors} onAddNode={addConnectorNode} recentConnectorTypes={recentConnectorTypes} />
       <section className="canvas-shell" aria-label="Pipeline canvas" ref={canvasRef}>
         {connectionError ? <div className="canvas-alert">{connectionError}</div> : null}
         {selectedGraphEdge ? (
@@ -1060,6 +1070,7 @@ const PipelineFlowNode = memo(function PipelineFlowNode({ data }: { data: Pipeli
 const PIPELINE_NODE_TYPES = { pipelineNode: PipelineFlowNode };
 const PIPELINE_NODE_WIDTH = 220;
 const PIPELINE_NODE_HEIGHT = 74;
+const RECENT_CONNECTOR_TYPES_KEY = "onestep-web:recent-connectors";
 
 const DEFAULT_EDGE_OPTIONS: Partial<Edge> = {
   animated: true,
@@ -1070,3 +1081,21 @@ const DEFAULT_EDGE_OPTIONS: Partial<Edge> = {
 
 const CONNECTION_LINE_STYLE = { strokeWidth: 2 };
 const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 1 };
+
+function readRecentConnectorTypes(): string[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_CONNECTOR_TYPES_KEY);
+    const value = raw ? JSON.parse(raw) : [];
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").slice(0, 5) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentConnectorTypes(connectorTypes: string[]) {
+  try {
+    window.localStorage.setItem(RECENT_CONNECTOR_TYPES_KEY, JSON.stringify(connectorTypes));
+  } catch {
+    // Recent connectors are a convenience cache; failing to persist them should not block editing.
+  }
+}

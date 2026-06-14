@@ -270,6 +270,33 @@ button:active,
   padding: 14px;
 }
 
+.palette-search {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.palette-search span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.palette-search input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  padding: 8px;
+}
+
+.palette-search input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(47 109 246 / 14%);
+  outline: none;
+}
+
 .palette-group + .palette-group {
   margin-top: 20px;
 }
@@ -310,6 +337,13 @@ button:active,
 .palette-node small {
   color: var(--muted);
   line-height: 1.35;
+}
+
+.palette-empty {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .canvas-shell {
