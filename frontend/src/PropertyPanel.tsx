@@ -1,5 +1,5 @@
 import Editor from "@monaco-editor/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "./api";
 import type { ConnectorDescriptor, Credential, DebugResult, GraphNode } from "./types";
 
@@ -10,6 +10,7 @@ type PropertyPanelProps = {
   upstreamSample: unknown;
   onChange: (node: GraphNode) => void;
   onDebugSample: (nodeId: string, sample: unknown) => void;
+  variant?: "side" | "focused";
 };
 
 export function PropertyPanel({
@@ -18,7 +19,8 @@ export function PropertyPanel({
   credentials,
   upstreamSample,
   onChange,
-  onDebugSample
+  onDebugSample,
+  variant = "side"
 }: PropertyPanelProps) {
   const [sampleResult, setSampleResult] = useState<DebugResult | null>(null);
   const [handlerResult, setHandlerResult] = useState<DebugResult | null>(null);
@@ -44,7 +46,7 @@ export function PropertyPanel({
 
   if (!node || !connector) {
     return (
-      <aside className="property-panel empty-panel">
+      <aside className={`property-panel ${variant === "focused" ? "focused-panel" : ""} empty-panel`}>
         <h2>Properties</h2>
         <p>Select a node to configure connector details, credentials, mappings, or Python code.</p>
       </aside>
@@ -164,7 +166,7 @@ export function PropertyPanel({
   }
 
   return (
-    <aside className="property-panel">
+    <aside className={`property-panel ${variant === "focused" ? "focused-panel" : ""}`}>
       <div className="panel-heading">
         <span>{activeConnector.category}</span>
         <h2>{activeConnector.label}</h2>
@@ -172,103 +174,129 @@ export function PropertyPanel({
       </div>
 
       {activeConnector.category !== "handler" ? (
-        <section className="property-section">
-          <h3>Connection</h3>
-          <label className="field">
-            <span>Credential</span>
-            <select
-              onChange={(event) => patch({ credential_ref: event.target.value || null })}
-              value={activeNode.credential_ref ?? ""}
-            >
-              <option value="">Direct input</option>
-              {matchingCredentials.map((credential) => (
-                <option key={credential.id} value={credential.name}>
-                  {credential.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {activeConnector.fields.map((field) => (
-            <ConfigField
-              field={field}
-              key={field.name}
-              onChange={(value) => setConfig(field, value)}
-              value={String(activeNode.config[field.name] ?? "")}
-            />
-          ))}
-          <DebugActions
-            busy={debugBusy}
-            disabled={missingConfiguredSample}
-            onFetchSample={fetchSample}
-            sampleResult={sampleResult}
-            sampleHint={sampleHint}
-          />
-        </section>
-      ) : (
-        <section className="property-section">
-          <h3>Handler</h3>
-          <div className="segmented">
-            <button
-              className={activeNode.mode !== "code" ? "active" : ""}
-              onClick={() => patch({ mode: "visual" })}
-              type="button"
-            >
-              Mapping
-            </button>
-            <button
-              className={activeNode.mode === "code" ? "active" : ""}
-              onClick={() => patch({ mode: "code" })}
-              type="button"
-            >
-              Python
-            </button>
-          </div>
-          {activeNode.mode === "code" ? (
-            <div className="code-editor-shell">
-              <Editor
-                defaultLanguage="python"
-                height="260px"
-                onChange={(value) => patch({ code: value ?? "" })}
-                options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: "on" }}
-                value={
-                  activeNode.code ??
-                  'async def handler(ctx, payload):\n    """Transform upstream payload."""\n    return payload\n'
-                }
+        <>
+          <PropertyStep step={1} title="Connection">
+            <label className="field">
+              <span>Credential</span>
+              <select
+                onChange={(event) => patch({ credential_ref: event.target.value || null })}
+                value={activeNode.credential_ref ?? ""}
+              >
+                <option value="">Direct input</option>
+                {matchingCredentials.map((credential) => (
+                  <option key={credential.id} value={credential.name}>
+                    {credential.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {activeConnector.fields.map((field) => (
+              <ConfigField
+                field={field}
+                key={field.name}
+                onChange={(value) => setConfig(field, value)}
+                value={String(activeNode.config[field.name] ?? "")}
               />
-            </div>
-          ) : (
-            <VisualMappingEditor
-              fields={upstreamFields}
-              mapping={activeNode.mapping ?? {}}
-              onAddMapping={addMapping}
-              onInsertField={insertFieldExpression}
-              onRemoveMapping={removeMapping}
-              onRenameMapping={renameMappingKey}
-              onSelectMapping={setSelectedMappingKey}
-              onUpdateExpression={updateMappingExpression}
-              selectedMappingKey={selectedMappingKey}
+            ))}
+          </PropertyStep>
+          <PropertyStep step={2} title="Sample Debug">
+            <DebugActions
+              busy={debugBusy}
+              disabled={missingConfiguredSample}
+              onFetchSample={fetchSample}
+              sampleResult={sampleResult}
+              sampleHint={sampleHint}
             />
-          )}
-          <div className="debug-panel">
-            <div className="debug-heading">
-              <h3>Handler Debug</h3>
-              <button disabled={debugBusy === "handler"} onClick={runHandler} type="button">
-                {debugBusy === "handler" ? "Running" : "Run Handler"}
+          </PropertyStep>
+        </>
+      ) : (
+        <>
+          <PropertyStep step={1} title="Transform">
+            <div className="segmented">
+              <button
+                className={activeNode.mode !== "code" ? "active" : ""}
+                onClick={() => patch({ mode: "visual" })}
+                type="button"
+              >
+                Mapping
+              </button>
+              <button
+                className={activeNode.mode === "code" ? "active" : ""}
+                onClick={() => patch({ mode: "code" })}
+                type="button"
+              >
+                Python
               </button>
             </div>
-            <label className="field">
-              <span>Input Payload</span>
-              <textarea
-                onChange={(event) => setHandlerPayload(event.target.value)}
-                rows={8}
-                value={handlerPayload}
+            {activeNode.mode === "code" ? (
+              <div className="code-editor-shell">
+                <Editor
+                  defaultLanguage="python"
+                  height="260px"
+                  onChange={(value) => patch({ code: value ?? "" })}
+                  options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: "on" }}
+                  value={
+                    activeNode.code ??
+                    'async def handler(ctx, payload):\n    """Transform upstream payload."""\n    return payload\n'
+                  }
+                />
+              </div>
+            ) : (
+              <VisualMappingEditor
+                fields={upstreamFields}
+                mapping={activeNode.mapping ?? {}}
+                onAddMapping={addMapping}
+                onInsertField={insertFieldExpression}
+                onRemoveMapping={removeMapping}
+                onRenameMapping={renameMappingKey}
+                onSelectMapping={setSelectedMappingKey}
+                onUpdateExpression={updateMappingExpression}
+                selectedMappingKey={selectedMappingKey}
               />
-            </label>
-            <DebugResultView result={handlerResult} />
-          </div>
-        </section>
+            )}
+          </PropertyStep>
+          <PropertyStep step={2} title="Handler Debug">
+            <div className="debug-panel">
+              <div className="debug-heading">
+                <h3>Run Handler</h3>
+                <button disabled={debugBusy === "handler"} onClick={runHandler} type="button">
+                  {debugBusy === "handler" ? "Running" : "Run Handler"}
+                </button>
+              </div>
+              <label className="field">
+                <span>Input Payload</span>
+                <textarea
+                  onChange={(event) => setHandlerPayload(event.target.value)}
+                  rows={8}
+                  value={handlerPayload}
+                />
+              </label>
+              <DebugResultView result={handlerResult} />
+            </div>
+          </PropertyStep>
+        </>
       )}
     </aside>
+  );
+}
+
+function PropertyStep({
+  step,
+  title,
+  children
+}: {
+  step: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="property-section property-step">
+      <div className="step-heading">
+        <span>Step {step}</span>
+        <h3>{title}</h3>
+      </div>
+      {children}
+    </section>
   );
 }
 

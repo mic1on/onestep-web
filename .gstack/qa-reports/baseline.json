@@ -1,0 +1,41 @@
+{
+  "date": "2026-06-14",
+  "url": "http://127.0.0.1:5173/",
+  "healthScore": 82,
+  "issues": [
+    {
+      "id": "ISSUE-001",
+      "title": "Start is enabled on an invalid pipeline",
+      "severity": "High",
+      "category": "Functional / UX"
+    },
+    {
+      "id": "ISSUE-002",
+      "title": "Start failure leaves the top status stale until reload",
+      "severity": "Medium",
+      "category": "Functional / Feedback"
+    },
+    {
+      "id": "ISSUE-003",
+      "title": "Pipeline Delete has no confirmation or undo",
+      "severity": "Medium",
+      "category": "Data safety / UX"
+    },
+    {
+      "id": "ISSUE-004",
+      "title": "Mobile runtime logs are unreadable",
+      "severity": "Medium",
+      "category": "Responsive UX"
+    }
+  ],
+  "categoryScores": {
+    "console": 70,
+    "links": 100,
+    "visual": 92,
+    "functional": 77,
+    "ux": 76,
+    "performance": 100,
+    "content": 100,
+    "accessibility": 85
+  }
+}

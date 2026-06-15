@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import httpx
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from onestep_web.compiler import PipelineCompiler
@@ -42,6 +42,9 @@ class PipelineDebugger:
         try:
             if node.type.startswith("mysql_"):
                 await self._test_mysql(node, credentials)
+                return _result("ok", "connection succeeded", started=started)
+            if node.type.startswith("postgres_"):
+                await self._test_postgres(node, credentials)
                 return _result("ok", "connection succeeded", started=started)
             if node.type.startswith("rabbitmq_"):
                 await self._test_rabbitmq(node, credentials)
@@ -82,6 +85,9 @@ class PipelineDebugger:
         try:
             if node.type.startswith("mysql_") and _node_kind(node) == "source":
                 rows = await self._fetch_mysql_sample(node, credentials, sample_limit=sample_limit)
+                return _result("ok", f"fetched {len(rows)} row(s)", data=rows, started=started)
+            if node.type.startswith("postgres_") and _node_kind(node) == "source":
+                rows = await self._fetch_postgres_sample(node, credentials, sample_limit=sample_limit)
                 return _result("ok", f"fetched {len(rows)} row(s)", data=rows, started=started)
             if node.type.startswith("redis_") and _node_kind(node) == "source":
                 rows = await self._fetch_redis_sample(node, credentials, sample_limit=sample_limit)
@@ -167,6 +173,14 @@ class PipelineDebugger:
         finally:
             await engine.dispose()
 
+    async def _test_postgres(self, node: GraphNode, credentials: dict[str, DebugCredential]) -> None:
+        dsn = _postgres_dsn(node, credentials)
+        engine = create_engine(_sync_postgres_dsn(dsn), pool_pre_ping=True)
+        try:
+            await asyncio.to_thread(_execute_probe, engine)
+        finally:
+            await asyncio.to_thread(engine.dispose)
+
     async def _test_rabbitmq(self, node: GraphNode, credentials: dict[str, DebugCredential]) -> None:
         import aio_pika
 
@@ -247,6 +261,28 @@ class PipelineDebugger:
                 return [dict(row._mapping) for row in result]
         finally:
             await engine.dispose()
+
+    async def _fetch_postgres_sample(
+        self,
+        node: GraphNode,
+        credentials: dict[str, DebugCredential],
+        *,
+        sample_limit: int,
+    ) -> list[dict[str, Any]]:
+        table = str(node.config.get("table", "")).strip()
+        if not _SAFE_SQL_NAME.fullmatch(table):
+            raise ValueError("Postgres sample fetch requires a simple table name")
+        dsn = _postgres_dsn(node, credentials)
+        engine = create_engine(_sync_postgres_dsn(dsn), pool_pre_ping=True)
+        try:
+            return await asyncio.to_thread(
+                _fetch_table_sample,
+                engine,
+                _quote_postgres_name(table),
+                sample_limit,
+            )
+        finally:
+            await asyncio.to_thread(engine.dispose)
 
     async def _fetch_redis_sample(
         self,
@@ -393,6 +429,14 @@ def _mysql_dsn(node: GraphNode, credentials: dict[str, DebugCredential]) -> str:
     return interpolate_env_vars(raw, env_vars) if env_vars else raw
 
 
+def _postgres_dsn(node: GraphNode, credentials: dict[str, DebugCredential]) -> str:
+    config, env_vars = _connection_config(node, credentials)
+    raw = str(config.get("dsn") or config.get("url") or "").strip()
+    if not raw:
+        raise ValueError("Postgres connection requires dsn or url")
+    return interpolate_env_vars(raw, env_vars) if env_vars else raw
+
+
 def _connection_config(
     node: GraphNode,
     credentials: dict[str, DebugCredential],
@@ -496,11 +540,34 @@ def _async_mysql_dsn(dsn: str) -> str:
     return dsn
 
 
+def _sync_postgres_dsn(dsn: str) -> str:
+    if dsn.startswith("postgresql://"):
+        return "postgresql+psycopg://" + dsn.removeprefix("postgresql://")
+    if dsn.startswith("postgres://"):
+        return "postgresql+psycopg://" + dsn.removeprefix("postgres://")
+    return dsn
+
+
 _SAFE_SQL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?")
 
 
 def _quote_sql_name(name: str) -> str:
     return ".".join(f"`{part}`" for part in name.split("."))
+
+
+def _quote_postgres_name(name: str) -> str:
+    return ".".join(f'"{part}"' for part in name.split("."))
+
+
+def _execute_probe(engine: Any) -> None:
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+
+
+def _fetch_table_sample(engine: Any, table_name: str, sample_limit: int) -> list[dict[str, Any]]:
+    with engine.connect() as connection:
+        result = connection.execute(text(f"SELECT * FROM {table_name} LIMIT :limit"), {"limit": sample_limit})
+        return [dict(row._mapping) for row in result]
 
 
 def _node_kind(node: GraphNode) -> str:

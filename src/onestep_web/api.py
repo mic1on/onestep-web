@@ -47,10 +47,19 @@ class AppState:
     def __init__(self, db: Database) -> None:
         self.db = db
         self.cipher: CredentialCipher = load_or_create_cipher(db.settings)
-        self.runtime = PipelineRuntimePool()
+        self.runtime = PipelineRuntimePool(completion_sink=self.mark_runtime_completion)
         self.exporter = WorkerExporter()
         self.debugger = PipelineDebugger()
         self.log_subscribers: dict[str, set[asyncio.Queue[PipelineLogRead]]] = defaultdict(set)
+
+    async def mark_runtime_completion(self, pipeline_id: str, status: str, message: str) -> None:
+        async for session in self.db.session():
+            pipeline = await session.get(Pipeline, pipeline_id)
+            if pipeline is not None:
+                pipeline.status = status
+                pipeline.updated_at = utcnow()
+                await session.commit()
+            return
 
 
 def create_api(db: Database | None = None) -> FastAPI:

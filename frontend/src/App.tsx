@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { CredentialManager } from "./CredentialManager";
 import { LogsPanel } from "./LogsPanel";
-import { PipelineEditor, validatePipelineGraphConditions } from "./PipelineEditor";
+import { PipelineEditor, validatePipelineGraphIssues } from "./PipelineEditor";
+import { PIPELINE_TEMPLATES, type PipelineTemplate } from "./templates";
 import type { ConnectorDescriptor, Credential, Pipeline, PipelineGraph } from "./types";
 
 const EMPTY_GRAPH: PipelineGraph = { nodes: [], edges: [] };
@@ -19,11 +20,20 @@ export function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [activeView, setActiveView] = useState<AppView>("builder");
+  const [isLogsOpen, setIsLogsOpen] = useState(false);
 
   const activePipeline = useMemo(
     () => pipelines.find((pipeline) => pipeline.id === activePipelineId) ?? null,
     [activePipelineId, pipelines]
   );
+  const credentialNames = useMemo(() => new Set(credentials.map((credential) => credential.name)), [credentials]);
+  const graphIssues = useMemo(
+    () => validatePipelineGraphIssues(draftGraph, { credentialNames }),
+    [credentialNames, draftGraph]
+  );
+  const graphError = graphIssues[0]?.message ?? null;
+  const canRunPipeline = graphIssues.length === 0;
+  const canExportPipeline = Boolean(activePipelineId) && graphIssues.length === 0;
 
   useEffect(() => {
     void refresh();
@@ -53,6 +63,15 @@ export function App() {
     setMessage(`Loaded ${pipeline.name}`);
   }
 
+  function loadTemplate(template: PipelineTemplate) {
+    setActivePipelineId(null);
+    setDraftName(template.name);
+    setDraftGraph(cloneGraph(template.graph));
+    setSelectedNodeId(null);
+    setIsLogsOpen(false);
+    setMessage(`Loaded template: ${template.name}`);
+  }
+
   async function savePipeline(): Promise<Pipeline> {
     if (activePipelineId) {
       const saved = await api.updatePipeline(activePipelineId, { name: draftName, graph: draftGraph });
@@ -68,19 +87,29 @@ export function App() {
   }
 
   async function startPipeline() {
-    const conditionError = firstConditionError(draftGraph);
-    if (conditionError) {
-      setMessage(conditionError);
+    if (graphError) {
+      setMessage(graphError);
       return;
     }
-    const pipeline = activePipelineId
-      ? await api.updatePipeline(activePipelineId, { name: draftName, graph: draftGraph })
-      : await savePipeline();
-    const id = pipeline.id;
-    const status = await api.startPipeline(id);
-    await refresh();
-    setActivePipelineId(id);
-    setMessage(status.message);
+    const id = activePipelineId;
+    try {
+      const pipeline = id
+        ? await api.updatePipeline(id, { name: draftName, graph: draftGraph })
+        : await savePipeline();
+      const status = await api.startPipeline(pipeline.id);
+      await refresh();
+      setActivePipelineId(pipeline.id);
+      if (status.status === "error") {
+        setPipelines((current) => markPipelineStatus(current, pipeline.id, "error"));
+      }
+      setMessage(status.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to start pipeline";
+      if (id) {
+        setPipelines((current) => markPipelineStatus(current, id, "error"));
+      }
+      setMessage(message);
+    }
   }
 
   async function stopPipeline() {
@@ -97,6 +126,11 @@ export function App() {
       return;
     }
     const deletedId = activePipelineId;
+    const deletedPipeline = pipelines.find((pipeline) => pipeline.id === deletedId);
+    const confirmed = window.confirm(`Delete pipeline "${deletedPipeline?.name ?? deletedId}"? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
     const deletedIndex = pipelines.findIndex((pipeline) => pipeline.id === deletedId);
     await api.deletePipeline(deletedId);
     const remaining = pipelines.filter((pipeline) => pipeline.id !== deletedId);
@@ -137,9 +171,8 @@ export function App() {
     if (!activePipelineId) {
       return;
     }
-    const conditionError = firstConditionError(draftGraph);
-    if (conditionError) {
-      setMessage(conditionError);
+    if (graphError) {
+      setMessage(graphError);
       return;
     }
     const blob = await api.exportPipeline(activePipelineId);
@@ -174,7 +207,10 @@ export function App() {
           </button>
           <button
             className={activeView === "credentials" ? "active" : ""}
-            onClick={() => setActiveView("credentials")}
+            onClick={() => {
+              setActiveView("credentials");
+              setIsLogsOpen(false);
+            }}
             type="button"
           >
             Credentials
@@ -195,14 +231,21 @@ export function App() {
                   Stop
                 </button>
               ) : (
-                <button className="primary-button" onClick={startPipeline} type="button">
+                <button
+                  className="primary-button"
+                  disabled={!canRunPipeline}
+                  onClick={startPipeline}
+                  title={graphError ?? undefined}
+                  type="button"
+                >
                   Start
                 </button>
               )}
               <button
-                className={activePipelineId ? "button-link-export" : "button-link-export disabled"}
-                disabled={!activePipelineId}
+                className={canExportPipeline ? "button-link-export" : "button-link-export disabled"}
+                disabled={!canExportPipeline}
                 onClick={exportPipeline}
+                title={graphError ?? undefined}
                 type="button"
               >
                 Export
@@ -255,8 +298,36 @@ export function App() {
                 <strong>New Pipeline</strong>
                 <span>draft</span>
               </button>
+              {PIPELINE_TEMPLATES.map((template) => (
+                <button
+                  className="template-tab"
+                  key={template.id}
+                  onClick={() => loadTemplate(template)}
+                  type="button"
+                >
+                  <strong>{template.name}</strong>
+                  <span>template</span>
+                </button>
+              ))}
             </div>
-            <div className="status-line">{message || "Ready"}</div>
+            <div className="status-line status-actions">
+              <div className="status-message">
+                <span>{message || (graphIssues.length ? `${graphIssues.length} validation issues` : "Ready")}</span>
+                {graphIssues.length ? (
+                  <details className="validation-summary">
+                    <summary>Show details</summary>
+                    <ul>
+                      {graphIssues.slice(0, 6).map((issue) => (
+                        <li key={issue.message}>{issue.message}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+              </div>
+              <button disabled={!activePipelineId} onClick={() => setIsLogsOpen(true)} type="button">
+                Logs
+              </button>
+            </div>
           </section>
 
           <PipelineEditor
@@ -266,11 +337,31 @@ export function App() {
             onGraphChange={setDraftGraph}
             onSelectedNodeChange={setSelectedNodeId}
             selectedNodeId={selectedNodeId}
+            validationIssues={graphIssues}
           />
 
-          <section className="lower-grid logs-only">
-            <LogsPanel pipelineId={activePipelineId} />
-          </section>
+          {isLogsOpen ? (
+            <div className="logs-drawer-backdrop" onMouseDown={() => setIsLogsOpen(false)}>
+              <aside
+                aria-label="Pipeline runtime logs"
+                aria-modal="true"
+                className="logs-drawer"
+                onMouseDown={(event) => event.stopPropagation()}
+                role="dialog"
+              >
+                <div className="logs-drawer-titlebar">
+                  <div>
+                    <span>Runtime Stream</span>
+                    <strong>Pipeline logs</strong>
+                  </div>
+                  <button onClick={() => setIsLogsOpen(false)} type="button">
+                    Close
+                  </button>
+                </div>
+                <LogsPanel pipelineId={activePipelineId} showHeading={false} />
+              </aside>
+            </div>
+          ) : null}
         </>
       ) : (
         <main className="credentials-page">
@@ -286,6 +377,16 @@ export function App() {
   );
 }
 
-function firstConditionError(graph: PipelineGraph): string | null {
-  return validatePipelineGraphConditions(graph)[0] ?? null;
+function markPipelineStatus(
+  pipelines: Pipeline[],
+  pipelineId: string,
+  status: Pipeline["status"]
+): Pipeline[] {
+  return pipelines.map((pipeline) => (
+    pipeline.id === pipelineId ? { ...pipeline, status } : pipeline
+  ));
+}
+
+function cloneGraph(graph: PipelineGraph): PipelineGraph {
+  return JSON.parse(JSON.stringify(graph)) as PipelineGraph;
 }

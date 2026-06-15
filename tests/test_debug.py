@@ -100,6 +100,33 @@ def test_debug_tests_rabbitmq_connection_provider(
     assert body["message"] == "connection succeeded"
 
 
+def test_debug_tests_postgres_connection_provider(client: TestClient, monkeypatch) -> None:
+    async def fake_test_postgres(self, node, credentials) -> None:
+        assert node.type == "postgres_source"
+
+    monkeypatch.setattr(PipelineDebugger, "_test_postgres", fake_test_postgres)
+
+    response = client.post(
+        "/api/debug/nodes/test-connection",
+        json={
+            "node": {
+                "id": "orders",
+                "type": "postgres_source",
+                "kind": "source",
+                "config": {
+                    "dsn": "postgresql+psycopg://sync:secret@localhost:5432/orders",
+                    "table": "orders",
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["message"] == "connection succeeded"
+
+
 def test_debug_connection_config_overrides_saved_config_with_saved_env_vars() -> None:
     node = GraphNode.model_validate(
         {
@@ -222,6 +249,43 @@ def test_debug_fetches_redis_stream_sample(client: TestClient, monkeypatch) -> N
     assert body["status"] == "ok"
     assert body["data"] == [{"id": "1-0", "fields": {"order_id": "A001"}}]
     assert body["schema"] == [{"id": "str", "fields": {"order_id": "str"}}]
+
+
+def test_debug_fetches_postgres_sample_provider(client: TestClient, monkeypatch) -> None:
+    async def fake_fetch_postgres_sample(
+        self,
+        node,
+        credentials,
+        *,
+        sample_limit: int,
+    ) -> list[dict[str, Any]]:
+        assert node.type == "postgres_source"
+        assert sample_limit == 2
+        return [{"id": 1, "status": "new"}]
+
+    monkeypatch.setattr(PipelineDebugger, "_fetch_postgres_sample", fake_fetch_postgres_sample)
+
+    response = client.post(
+        "/api/debug/nodes/fetch-sample",
+        json={
+            "node": {
+                "id": "orders",
+                "type": "postgres_source",
+                "kind": "source",
+                "config": {
+                    "dsn": "postgresql+psycopg://sync:secret@localhost:5432/orders",
+                    "table": "orders",
+                },
+            },
+            "sample_limit": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["data"] == [{"id": 1, "status": "new"}]
+    assert body["schema"] == [{"id": "int", "status": "str"}]
 
 
 def test_debug_tests_sqs_connection_provider(client: TestClient, monkeypatch) -> None:

@@ -11,7 +11,7 @@ type CredentialCreateInput = {
 
 type CredentialUpdateInput = CredentialCreateInput;
 
-type CredentialKind = "mysql" | "rabbitmq" | "redis" | "sqs" | "feishu_bitable";
+type CredentialKind = "mysql" | "postgres" | "rabbitmq" | "redis" | "sqs" | "feishu_bitable";
 
 type EnvVarRow = {
   key: string;
@@ -172,6 +172,7 @@ export function CredentialManager({ credentials, onCreate, onUpdate, onDelete }:
                 value={form.connectorType}
               >
                 <option value="mysql">MySQL</option>
+                <option value="postgres">Postgres</option>
                 <option value="rabbitmq">RabbitMQ</option>
                 <option value="redis">Redis</option>
                 <option value="sqs">SQS</option>
@@ -294,7 +295,7 @@ function ConnectorFields({
     <div className="connector-fields">
       <TextField label="Host" value={form.host} onChange={(host) => onChange({ host })} />
       <TextField label="Port" value={form.port} onChange={(port) => onChange({ port })} />
-      {form.connectorType === "mysql" ? (
+      {["mysql", "postgres"].includes(form.connectorType) ? (
         <TextField label="Database" value={form.database} onChange={(database) => onChange({ database })} />
       ) : null}
       {form.connectorType === "rabbitmq" ? (
@@ -363,6 +364,11 @@ function buildCredentialInput(form: CredentialForm): CredentialCreateInput {
     return withEnvSecrets(form, config, { PASSWORD: form.password }, extraEnvVars);
   }
 
+  if (form.connectorType === "postgres") {
+    const config = { dsn: form.advancedValue.trim() || postgresDsn(form) };
+    return withEnvSecrets(form, config, { PASSWORD: form.password }, extraEnvVars);
+  }
+
   if (form.connectorType === "rabbitmq") {
     const config = { url: form.advancedValue.trim() || rabbitUrl(form) };
     return withEnvSecrets(form, config, { PASSWORD: form.password }, extraEnvVars);
@@ -423,6 +429,10 @@ function withEnvSecrets(
 
 function mysqlDsn(form: CredentialForm, passwordMode: "secret" | "literal" = "secret"): string {
   return `${connectionScheme("mysql", form)}://${authPart(form, passwordMode)}${hostPart(form)}${pathPart(form.database)}`;
+}
+
+function postgresDsn(form: CredentialForm, passwordMode: "secret" | "literal" = "secret"): string {
+  return `postgresql+psycopg://${authPart(form, passwordMode)}${hostPart(form)}${pathPart(form.database)}`;
 }
 
 function rabbitUrl(form: CredentialForm, passwordMode: "secret" | "literal" = "secret"): string {
@@ -516,6 +526,7 @@ function testNodeFromForm(form: CredentialForm, credential: Credential | null): 
 
 function testNodeType(connectorType: CredentialKind): string {
   return {
+    postgres: "postgres_source",
     mysql: "mysql_source",
     rabbitmq: "rabbitmq_source",
     redis: "redis_stream_source",
@@ -527,6 +538,9 @@ function testNodeType(connectorType: CredentialKind): string {
 function directTestConfig(form: CredentialForm, useStoredSecrets: boolean): Record<string, unknown> {
   if (form.connectorType === "mysql") {
     return { dsn: mysqlDsn(form, passwordTestMode(form, useStoredSecrets)) };
+  }
+  if (form.connectorType === "postgres") {
+    return { dsn: postgresDsn(form, passwordTestMode(form, useStoredSecrets)) };
   }
   if (form.connectorType === "rabbitmq") {
     return { url: rabbitUrl(form, passwordTestMode(form, useStoredSecrets)) };
@@ -560,7 +574,7 @@ function testSecretValue(value: string, key: string, useStoredSecrets: boolean):
 }
 
 function hasMaskedConnectorSecrets(form: CredentialForm): boolean {
-  if (["mysql", "rabbitmq", "redis"].includes(form.connectorType)) {
+  if (["mysql", "postgres", "rabbitmq", "redis"].includes(form.connectorType)) {
     return form.password === MASKED_SECRET;
   }
   if (form.connectorType === "sqs") {
@@ -600,7 +614,7 @@ function defaultForm(connectorType: CredentialKind): CredentialForm {
   return {
     name: defaultName(connectorType),
     connectorType,
-    host: connectorType === "mysql" ? "localhost" : "127.0.0.1",
+    host: ["mysql", "postgres"].includes(connectorType) ? "localhost" : "127.0.0.1",
     port: defaultPort(connectorType),
     database: "",
     username: defaultUsername(connectorType),
@@ -623,6 +637,7 @@ function defaultForm(connectorType: CredentialKind): CredentialForm {
 function defaultName(connectorType: CredentialKind): string {
   return {
     mysql: "PROD_MYSQL",
+    postgres: "PROD_POSTGRES",
     rabbitmq: "PROD_RABBITMQ",
     redis: "PROD_REDIS",
     sqs: "PROD_SQS",
@@ -633,6 +648,7 @@ function defaultName(connectorType: CredentialKind): string {
 function defaultPort(connectorType: CredentialKind): string {
   return {
     mysql: "3306",
+    postgres: "5432",
     rabbitmq: "5672",
     redis: "6379",
     sqs: "",
@@ -685,7 +701,7 @@ function formFromCredential(credential: Credential): CredentialForm {
     port: parsed.port || form.port,
     username: parsed.username || form.username,
     password: secretValue(env, "PASSWORD", parsed.password),
-    database: connectorType === "mysql" ? parsed.path : form.database,
+    database: ["mysql", "postgres"].includes(connectorType) ? parsed.path : form.database,
     virtualHost: connectorType === "rabbitmq" ? parsed.path || "/" : form.virtualHost,
     redisDb: connectorType === "redis" ? parsed.path || "0" : form.redisDb,
     tls: rawUrl.startsWith("rediss://"),
@@ -722,7 +738,7 @@ function secretValue(envVars: Record<string, string>, key: string, fallback: str
 }
 
 function toCredentialKind(value: string): CredentialKind {
-  if (["mysql", "rabbitmq", "redis", "sqs", "feishu_bitable"].includes(value)) {
+  if (["mysql", "postgres", "rabbitmq", "redis", "sqs", "feishu_bitable"].includes(value)) {
     return value as CredentialKind;
   }
   return "mysql";

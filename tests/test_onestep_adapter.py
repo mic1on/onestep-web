@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from onestep.config import validate_app_config
 
-from helpers import conditional_sink_graph, sample_graph, scheduled_http_graph
-from onestep_web.onestep_adapter import build_onestep_config, build_runtime_app
+from helpers import conditional_sink_graph, postgres_graph, sample_graph, scheduled_http_graph
+from onestep_web.onestep_adapter import build_onestep_config, build_requirements, build_runtime_app
 from onestep_web.schemas import PipelineGraph
 
 
@@ -133,6 +133,101 @@ def test_build_onestep_config_preserves_sqs_options() -> None:
             "aws_access_key_id": "${PROD_SQS_ACCESS_KEY_ID}",
             "aws_secret_access_key": "${PROD_SQS_SECRET_ACCESS_KEY}",
         },
+    }
+
+
+def test_build_onestep_config_maps_postgres_source_sink_and_requirement() -> None:
+    graph = PipelineGraph.model_validate(postgres_graph())
+    config = build_onestep_config(
+        "postgres orders",
+        graph,
+        handler_module="worker.handlers",
+        credentials={
+            "PROD_POSTGRES": {
+                "connector_type": "postgres",
+                "config": {"dsn": "postgresql://sync:${PASSWORD}@db.internal/orders"},
+                "env_vars": {"PASSWORD": "secret"},
+            },
+        },
+        runtime=False,
+    )
+
+    resources = config["resources"]
+    assert resources["cred_PROD_POSTGRES"] == {
+        "type": "postgres",
+        "dsn": "postgresql+psycopg://sync:${PROD_POSTGRES_PASSWORD}@db.internal/orders",
+    }
+    assert resources["node_orders"] == {
+        "type": "postgres_incremental",
+        "connector": "cred_PROD_POSTGRES",
+        "table": "orders",
+        "key": "id",
+        "cursor": ["updated_at", "id"],
+        "batch_size": 25,
+    }
+    assert resources["node_processed"] == {
+        "type": "postgres_table_sink",
+        "connector": "cred_PROD_POSTGRES",
+        "table": "processed_orders",
+        "mode": "upsert",
+        "keys": ["id"],
+    }
+    assert build_requirements(graph) == ["onestep[yaml]", "onestep-postgres"]
+    validate_app_config(config)
+
+
+def test_build_onestep_config_maps_postgres_table_queue_json_fields() -> None:
+    config = build_onestep_config(
+        "postgres queue",
+        PipelineGraph.model_validate(
+            {
+                "nodes": [
+                    {
+                        "id": "orders",
+                        "type": "postgres_source",
+                        "kind": "source",
+                        "credential_ref": "PROD_POSTGRES",
+                        "config": {
+                            "mode": "table_queue",
+                            "table": "orders",
+                            "key": "id",
+                            "where": "status = 'pending'",
+                            "claim": '{"status":"processing"}',
+                            "ack": '{"status":"done"}',
+                            "nack": '{"status":"pending"}',
+                        },
+                    },
+                    {
+                        "id": "processed",
+                        "type": "postgres_sink",
+                        "kind": "sink",
+                        "credential_ref": "PROD_POSTGRES",
+                        "config": {"table": "processed_orders"},
+                    },
+                ],
+                "edges": [{"from": "orders", "to": "processed"}],
+            }
+        ),
+        handler_module="worker.handlers",
+        credentials={
+            "PROD_POSTGRES": {
+                "connector_type": "postgres",
+                "config": {"dsn": "postgresql+psycopg://sync:${PASSWORD}@db.internal/orders"},
+                "env_vars": {"PASSWORD": "secret"},
+            },
+        },
+        runtime=False,
+    )
+
+    assert config["resources"]["node_orders"] == {
+        "type": "postgres_table_queue",
+        "connector": "cred_PROD_POSTGRES",
+        "table": "orders",
+        "key": "id",
+        "where": "status = 'pending'",
+        "claim": {"status": "processing"},
+        "ack": {"status": "done"},
+        "nack": {"status": "pending"},
     }
 
 

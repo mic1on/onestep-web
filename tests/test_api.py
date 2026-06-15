@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
 
@@ -41,13 +44,15 @@ def test_connectors_endpoint_includes_spec_nodes(client: TestClient) -> None:
     assert response.status_code == 200
     connectors = response.json()["items"]
     connector_types = {item["type"] for item in connectors}
-    assert {"rabbitmq_source", "handler", "mysql_sink", "http_sink"} <= connector_types
+    assert {"rabbitmq_source", "handler", "mysql_sink", "postgres_source", "postgres_sink", "http_sink"} <= connector_types
     fields_by_type = {
         item["type"]: {field["name"] for field in item["fields"]}
         for item in connectors
     }
     assert "sample_payload" in fields_by_type["rabbitmq_source"]
     assert "sample_payload" in fields_by_type["sqs_source"]
+    assert "cursor_column" in fields_by_type["postgres_source"]
+    assert "keys" in fields_by_type["postgres_sink"]
 
 
 def test_credentials_are_returned_masked(client: TestClient) -> None:
@@ -82,6 +87,46 @@ def test_start_pipeline_validates_graph_and_writes_logs(client: TestClient) -> N
     stopped = client.post(f"/api/pipelines/{pipeline['id']}/stop")
     assert stopped.status_code == 200
     assert stopped.json()["status"] == "stopped"
+
+
+def test_background_runtime_failure_marks_pipeline_error(client: TestClient, monkeypatch: Any) -> None:
+    class FailingApp:
+        shutdown_timeout_s = 0.1
+
+        async def serve(self) -> None:
+            await asyncio.sleep(0)
+            raise RuntimeError("runtime boom")
+
+        def request_shutdown(self) -> None:
+            pass
+
+    def failing_runtime_app(*args: Any, **kwargs: Any) -> tuple[FailingApp, str]:
+        return FailingApp(), "failing_runtime_module"
+
+    monkeypatch.setattr("onestep_web.runtime.build_runtime_app", failing_runtime_app)
+    pipeline = client.post(
+        "/api/pipelines",
+        json={"name": "定时通知管道", "description": "demo", "graph": scheduled_http_graph()},
+    ).json()
+
+    started = client.post(f"/api/pipelines/{pipeline['id']}/start")
+
+    assert started.status_code == 200
+    assert started.json()["status"] == "running"
+
+    deadline = time.monotonic() + 2
+    latest = pipeline
+    while time.monotonic() < deadline:
+        latest = client.get(f"/api/pipelines/{pipeline['id']}").json()
+        if latest["status"] == "error":
+            break
+        time.sleep(0.02)
+
+    assert latest["status"] == "error"
+    logs = client.get(f"/api/pipelines/{pipeline['id']}/logs").json()
+    assert ("failed", "pipeline failed: runtime boom") in [
+        (item["event_kind"], item["message"]) for item in logs
+    ]
 
 
 def test_update_running_pipeline_restarts_local_runtime(client: TestClient) -> None:

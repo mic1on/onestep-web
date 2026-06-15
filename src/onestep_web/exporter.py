@@ -4,6 +4,7 @@ import io
 import re
 import zipfile
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 
 import yaml
 
@@ -59,6 +60,7 @@ class WorkerExporter:
             root = f"{package_name}/"
             archive.writestr(root + "pyproject.toml", _worker_pyproject(package_name))
             archive.writestr(root + "worker.yaml", worker_yaml)
+            archive.writestr(root + "docker-compose.yml", _worker_compose())
             archive.writestr(root + ".env.example", env_example)
             archive.writestr(root + "requirements.txt", requirements)
             archive.writestr(root + f"src/{package_name}/__init__.py", "")
@@ -107,3 +109,26 @@ dependencies = ["onestep[yaml]"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 """
+
+
+def _worker_compose() -> str:
+    return f"""services:
+  worker:
+    image: "${{ONESTEP_WORKER_IMAGE:-{_default_worker_image()}}}"
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    env_file:
+      - .env.example
+    environment:
+      ONESTEP_TARGET: /workspace/worker.yaml
+"""
+
+
+def _default_worker_image() -> str:
+    try:
+        tag = version("onestep")
+    except PackageNotFoundError:
+        tag = "latest"
+    tag = re.sub(r"[^0-9A-Za-z_.-]", "-", tag)
+    return f"ghcr.io/mic1on/onestep-worker:{tag}"

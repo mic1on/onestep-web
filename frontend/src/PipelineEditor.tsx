@@ -3,16 +3,19 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
   Background,
-  ConnectionLineType,
+  BaseEdge,
   Controls,
+  getSmoothStepPath,
   MarkerType,
   MiniMap,
   Position,
   ReactFlow,
   type Connection,
+  type ConnectionLineComponentProps,
   type ReactFlowInstance,
   type Edge,
   type EdgeChange,
+  type EdgeProps,
   Handle,
   type Node,
   type NodeChange
@@ -28,6 +31,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type SyntheticEvent
 } from "react";
+import { createPortal } from "react-dom";
 import type { ConnectorDescriptor, Credential, GraphEdge, GraphNode, PipelineGraph } from "./types";
 import { NODE_PALETTE_CONNECTOR_MIME, NodePalette } from "./NodePalette";
 import { PropertyPanel } from "./PropertyPanel";
@@ -42,6 +46,7 @@ type PipelineNodeData = {
   nodeId?: string;
   kind?: GraphNode["kind"];
   connectionState?: string | null;
+  validationMessages?: string[];
   hasConnections?: boolean;
   onConfigure?: (nodeId: string) => void;
   onDelete?: (nodeId: string) => void;
@@ -60,6 +65,7 @@ type PipelineEditorProps = {
   graph: PipelineGraph;
   connectors: ConnectorDescriptor[];
   credentials: Credential[];
+  validationIssues?: PipelineGraphValidationIssue[];
   selectedNodeId: string | null;
   onGraphChange: (graph: PipelineGraph) => void;
   onSelectedNodeChange: (nodeId: string | null) => void;
@@ -69,6 +75,7 @@ export function PipelineEditor({
   graph,
   connectors,
   credentials,
+  validationIssues = [],
   selectedNodeId,
   onGraphChange,
   onSelectedNodeChange
@@ -78,6 +85,7 @@ export function PipelineEditor({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu | null>(null);
   const [recentConnectorTypes, setRecentConnectorTypes] = useState(readRecentConnectorTypes);
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const canvasRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
@@ -97,6 +105,11 @@ export function PipelineEditor({
   const selectedEdgeConditionFields = selectedGraphEdgeSource?.kind === "handler"
     ? conditionFieldSuggestions(debugSamples[selectedGraphEdgeSource.id])
     : [];
+  const focusedNode = focusedNodeId ? graph.nodes.find((node) => node.id === focusedNodeId) ?? null : null;
+  const focusedConnector = focusedNode
+    ? connectors.find((connector) => connector.type === focusedNode.type) ?? null
+    : null;
+  const focusedUpstreamSample = focusedNode ? firstUpstreamSample(focusedNode.id, graph, debugSamples) : null;
 
   const updateFromFlow = useCallback(
     (nextNodes: Node[], nextEdges: Edge[]) => {
@@ -141,6 +154,7 @@ export function PipelineEditor({
     setConnectionError("");
     setContextMenu(null);
     setSelectedEdgeId(null);
+    setFocusedNodeId((current) => (current === nodeId ? null : current));
     if (selectedNodeId === nodeId) {
       onSelectedNodeChange(null);
     }
@@ -175,10 +189,24 @@ export function PipelineEditor({
     }),
     [configureNode, deleteNode, disconnectNode, duplicateNode]
   );
+  const validationMessagesByNode = useMemo(() => {
+    const messages = new Map<string, string[]>();
+    for (const issue of validationIssues) {
+      if (!issue.nodeId) {
+        continue;
+      }
+      const current = messages.get(issue.nodeId) ?? [];
+      current.push(issue.message);
+      messages.set(issue.nodeId, current);
+    }
+    return messages;
+  }, [validationIssues]);
 
   const nodes = useMemo(
-    () => graph.nodes.map((node) => toFlowNode(node, graph.edges, selectedNodeId, nodeActions)),
-    [graph.edges, graph.nodes, nodeActions, selectedNodeId]
+    () => graph.nodes.map((node) => (
+      toFlowNode(node, graph.edges, selectedNodeId, nodeActions, validationMessagesByNode.get(node.id) ?? [])
+    )),
+    [graph.edges, graph.nodes, nodeActions, selectedNodeId, validationMessagesByNode]
   );
   const edges = useMemo(
     () => graph.edges.map((edge) => toFlowEdge(edge, selectedEdgeId)),
@@ -264,6 +292,10 @@ export function PipelineEditor({
         return;
       }
       if (event.key === "Escape") {
+        if (focusedNodeId) {
+          setFocusedNodeId(null);
+          return;
+        }
         setConnectionError("");
         setContextMenu(null);
         setSelectedEdgeId(null);
@@ -286,7 +318,13 @@ export function PipelineEditor({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [deleteEdge, deleteNode, onSelectedNodeChange, selectedEdgeId, selectedNodeId]);
+  }, [deleteEdge, deleteNode, focusedNodeId, onSelectedNodeChange, selectedEdgeId, selectedNodeId]);
+
+  useEffect(() => {
+    if (focusedNodeId && !focusedNode) {
+      setFocusedNodeId(null);
+    }
+  }, [focusedNode, focusedNodeId]);
 
   const clearEdgeCondition = useCallback((edgeId: string) => {
     onGraphChange({
@@ -371,6 +409,15 @@ export function PipelineEditor({
     setContextMenu(null);
     setSelectedEdgeId(null);
     onSelectedNodeChange(String(node.id));
+  }, [onSelectedNodeChange]);
+
+  const handleNodeDoubleClick = useCallback((_: unknown, node: Node) => {
+    const nodeId = String(node.id);
+    setConnectionError("");
+    setContextMenu(null);
+    setSelectedEdgeId(null);
+    onSelectedNodeChange(nodeId);
+    setFocusedNodeId(nodeId);
   }, [onSelectedNodeChange]);
 
   const handlePaneClick = useCallback(() => {
@@ -567,11 +614,12 @@ export function PipelineEditor({
           autoPanOnConnect
           autoPanOnNodeDrag
           connectionLineStyle={CONNECTION_LINE_STYLE}
-          connectionLineType={ConnectionLineType.SmoothStep}
+          connectionLineComponent={PipelineConnectionLine}
           connectionRadius={28}
           defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
           defaultViewport={DEFAULT_VIEWPORT}
           edges={edges}
+          edgeTypes={PIPELINE_EDGE_TYPES}
           elevateEdgesOnSelect
           nodeDragThreshold={2}
           nodeTypes={PIPELINE_NODE_TYPES}
@@ -587,6 +635,7 @@ export function PipelineEditor({
           }}
           onNodeClick={handleNodeClick}
           onNodeContextMenu={handleNodeContextMenu}
+          onNodeDoubleClick={handleNodeDoubleClick}
           onNodesChange={handleNodesChange}
           onPaneClick={handlePaneClick}
           onPaneContextMenu={handlePaneContextMenu}
@@ -605,7 +654,68 @@ export function PipelineEditor({
         onChange={updateNode}
         upstreamSample={upstreamSample}
       />
+      {focusedNode && focusedConnector ? (
+        <NodeConfigDialog
+          connector={focusedConnector}
+          credentials={credentials}
+          node={focusedNode}
+          onChange={updateNode}
+          onClose={() => setFocusedNodeId(null)}
+          onDebugSample={updateDebugSample}
+          upstreamSample={focusedUpstreamSample}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function NodeConfigDialog({
+  node,
+  connector,
+  credentials,
+  upstreamSample,
+  onChange,
+  onDebugSample,
+  onClose
+}: {
+  node: GraphNode;
+  connector: ConnectorDescriptor;
+  credentials: Credential[];
+  upstreamSample: unknown;
+  onChange: (node: GraphNode) => void;
+  onDebugSample: (nodeId: string, sample: unknown) => void;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div className="node-config-backdrop" onMouseDown={onClose}>
+      <div
+        aria-label="Focused node configuration"
+        aria-modal="true"
+        className="node-config-dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="node-config-titlebar">
+          <div>
+            <span>Focused configuration</span>
+            <strong>{node.id}</strong>
+          </div>
+          <button aria-label="Close focused configuration" onClick={onClose} type="button">
+            Close
+          </button>
+        </div>
+        <PropertyPanel
+          connector={connector}
+          credentials={credentials}
+          node={node}
+          onChange={onChange}
+          onDebugSample={onDebugSample}
+          upstreamSample={upstreamSample}
+          variant="focused"
+        />
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -664,6 +774,98 @@ export function validatePipelineGraphConditions(graph: PipelineGraph): string[] 
   return errors;
 }
 
+type PipelineGraphValidationOptions = {
+  credentialNames?: ReadonlySet<string>;
+};
+
+export type PipelineGraphValidationIssue = {
+  message: string;
+  nodeId?: string;
+  edge?: GraphEdge;
+};
+
+export function validatePipelineGraph(
+  graph: PipelineGraph,
+  options: PipelineGraphValidationOptions = {}
+): string[] {
+  return validatePipelineGraphIssues(graph, options).map((issue) => issue.message);
+}
+
+export function validatePipelineGraphIssues(
+  graph: PipelineGraph,
+  options: PipelineGraphValidationOptions = {}
+): PipelineGraphValidationIssue[] {
+  if (graph.nodes.length === 0) {
+    return [{ message: "pipeline graph must contain at least one node" }];
+  }
+
+  const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const incoming = new Map(graph.nodes.map((node) => [node.id, [] as string[]]));
+  const outgoing = new Map(graph.nodes.map((node) => [node.id, [] as string[]]));
+  const issues: PipelineGraphValidationIssue[] = [];
+
+  for (const edge of graph.edges) {
+    const source = nodesById.get(edge.from);
+    const target = nodesById.get(edge.to);
+    if (!source) {
+      issues.push({ message: `edge references missing source node ${edge.from}`, edge });
+    }
+    if (!target) {
+      issues.push({ message: `edge references missing target node ${edge.to}`, edge });
+    }
+    if (!source || !target) {
+      continue;
+    }
+
+    const conditionError = validateGraphEdgeCondition(graph, edge, nodesById);
+    if (conditionError) {
+      issues.push({ message: `Connection ${edge.from} -> ${edge.to}: ${conditionError}`, nodeId: edge.from, edge });
+    }
+    outgoing.get(edge.from)?.push(edge.to);
+    incoming.get(edge.to)?.push(edge.from);
+  }
+
+  for (const node of graph.nodes) {
+    const nodeIncoming = incoming.get(node.id) ?? [];
+    const nodeOutgoing = outgoing.get(node.id) ?? [];
+    if (node.kind === "source" && nodeIncoming.length > 0) {
+      issues.push({ message: `source node ${node.id} cannot have incoming edges`, nodeId: node.id });
+    }
+    if (node.kind === "sink" && nodeOutgoing.length > 0) {
+      issues.push({ message: `sink node ${node.id} cannot have outgoing edges`, nodeId: node.id });
+    }
+    if (node.kind !== "source" && nodeIncoming.length === 0) {
+      issues.push({ message: `${node.kind} node ${node.id} requires at least one incoming edge`, nodeId: node.id });
+    }
+    if (node.kind !== "sink" && nodeOutgoing.length === 0) {
+      issues.push({ message: `${node.kind} node ${node.id} requires at least one outgoing edge`, nodeId: node.id });
+    }
+    if (node.kind === "handler") {
+      if (node.mode === "code") {
+        if (!node.code?.trim()) {
+          issues.push({ message: `handler node ${node.id} is missing code`, nodeId: node.id });
+        }
+      } else if (Object.keys(node.mapping).length === 0) {
+        issues.push({ message: `handler node ${node.id} visual mapping is empty`, nodeId: node.id });
+      }
+    }
+    if (node.credential_ref && options.credentialNames && !options.credentialNames.has(node.credential_ref)) {
+      issues.push({ message: `credential ${node.credential_ref} is not defined`, nodeId: node.id });
+    }
+  }
+
+  const connectedError = validateGraphConnected(graph, incoming, outgoing);
+  if (connectedError) {
+    issues.push({ message: connectedError });
+  }
+  const cycleError = validateGraphAcyclic(graph, outgoing);
+  if (cycleError) {
+    issues.push({ message: cycleError });
+  }
+
+  return issues;
+}
+
 function validateGraphEdgeCondition(
   graph: PipelineGraph,
   edge: GraphEdge,
@@ -712,6 +914,60 @@ export function validateConditionExpression(condition: string): string | null {
     return "Condition cannot end with an operator.";
   }
   return validateBalancedExpression(expression);
+}
+
+function validateGraphConnected(
+  graph: PipelineGraph,
+  incoming: Map<string, string[]>,
+  outgoing: Map<string, string[]>
+): string | null {
+  const firstNode = graph.nodes[0];
+  if (!firstNode) {
+    return null;
+  }
+
+  const seen = new Set<string>();
+  const stack = [firstNode.id];
+  while (stack.length) {
+    const nodeId = stack.pop();
+    if (!nodeId || seen.has(nodeId)) {
+      continue;
+    }
+    seen.add(nodeId);
+    stack.push(...(incoming.get(nodeId) ?? []), ...(outgoing.get(nodeId) ?? []));
+  }
+
+  return seen.size === graph.nodes.length ? null : "pipeline graph must be connected";
+}
+
+function validateGraphAcyclic(graph: PipelineGraph, outgoing: Map<string, string[]>): string | null {
+  const indegree = new Map(graph.nodes.map((node) => [node.id, 0]));
+  for (const targets of outgoing.values()) {
+    for (const target of targets) {
+      indegree.set(target, (indegree.get(target) ?? 0) + 1);
+    }
+  }
+
+  const queue = graph.nodes
+    .map((node) => node.id)
+    .filter((nodeId) => (indegree.get(nodeId) ?? 0) === 0);
+  let visited = 0;
+  while (queue.length) {
+    const nodeId = queue.shift();
+    if (!nodeId) {
+      continue;
+    }
+    visited += 1;
+    for (const target of outgoing.get(nodeId) ?? []) {
+      const nextIndegree = (indegree.get(target) ?? 0) - 1;
+      indegree.set(target, nextIndegree);
+      if (nextIndegree === 0) {
+        queue.push(target);
+      }
+    }
+  }
+
+  return visited === graph.nodes.length ? null : "pipeline graph must be acyclic";
 }
 
 export function validateGraphConnection(
@@ -788,7 +1044,8 @@ function toFlowNode(
   node: GraphNode,
   edges: Array<{ from: string; to: string }>,
   selectedNodeId: string | null,
-  actions: Pick<PipelineNodeData, "onConfigure" | "onDelete" | "onDisconnect" | "onDuplicate">
+  actions: Pick<PipelineNodeData, "onConfigure" | "onDelete" | "onDisconnect" | "onDuplicate">,
+  validationMessages: string[]
 ): Node {
   const connectionState = connectionStateForNode(node, edges);
   const hasConnections = edges.some((edge) => edge.from === node.id || edge.to === node.id);
@@ -803,6 +1060,7 @@ function toFlowNode(
       nodeId: node.id,
       kind: node.kind,
       connectionState,
+      validationMessages,
       hasConnections,
       ...actions
     },
@@ -811,7 +1069,9 @@ function toFlowNode(
     initialWidth: PIPELINE_NODE_WIDTH,
     initialHeight: PIPELINE_NODE_HEIGHT,
     style: { width: PIPELINE_NODE_WIDTH, height: PIPELINE_NODE_HEIGHT },
-    className: connectionState ? "needs-connection" : undefined
+    className: [connectionState ? "needs-connection" : "", validationMessages.length ? "has-validation-error" : ""]
+      .filter(Boolean)
+      .join(" ") || undefined
   };
 }
 
@@ -822,7 +1082,7 @@ function toFlowEdge(edge: GraphEdge, selectedEdgeId: string | null): Edge {
     id,
     source: edge.from,
     target: edge.to,
-    type: "smoothstep",
+    type: "pipelineSmoothStep",
     label: condition || undefined,
     labelBgPadding: [8, 4],
     labelBgBorderRadius: 2,
@@ -1059,8 +1319,13 @@ const PipelineFlowNode = memo(function PipelineFlowNode({ data }: { data: Pipeli
       ) : null}
       <span>{kind}</span>
       <strong>{data.label}</strong>
+      {data.validationMessages?.length ? (
+        <div className="node-validation-badge" title={data.validationMessages.join("\n")}>
+          {data.validationMessages.length}
+        </div>
+      ) : null}
       <small className={data.connectionState ? "connection-state" : undefined}>
-        {data.connectionState ?? data.nodeId}
+        {data.validationMessages?.[0] ?? data.connectionState ?? data.nodeId}
       </small>
       {handles.source ? <Handle className="pipeline-handle source-handle" type="source" position={Position.Right} /> : null}
     </div>
@@ -1068,19 +1333,114 @@ const PipelineFlowNode = memo(function PipelineFlowNode({ data }: { data: Pipeli
 });
 
 const PIPELINE_NODE_TYPES = { pipelineNode: PipelineFlowNode };
-const PIPELINE_NODE_WIDTH = 220;
-const PIPELINE_NODE_HEIGHT = 74;
+const PIPELINE_EDGE_TYPES = { pipelineSmoothStep: PipelineSmoothStepEdge };
+const PIPELINE_NODE_WIDTH = 180;
+const PIPELINE_NODE_HEIGHT = 58;
 const RECENT_CONNECTOR_TYPES_KEY = "onestep-web:recent-connectors";
 
 const DEFAULT_EDGE_OPTIONS: Partial<Edge> = {
   animated: true,
   markerEnd: { type: MarkerType.ArrowClosed },
   style: { strokeWidth: 2 },
-  type: "smoothstep"
+  type: "pipelineSmoothStep"
 };
 
 const CONNECTION_LINE_STYLE = { strokeWidth: 2 };
 const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 1 };
+
+function PipelineSmoothStepEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  label,
+  labelStyle,
+  labelShowBg,
+  labelBgStyle,
+  labelBgPadding,
+  labelBgBorderRadius,
+  style,
+  markerEnd,
+  markerStart,
+  interactionWidth
+}: EdgeProps) {
+  const [path, labelX, labelY] = pipelineSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition
+  });
+
+  return (
+    <BaseEdge
+      id={id}
+      path={path}
+      labelX={labelX}
+      labelY={labelY}
+      label={label}
+      labelStyle={labelStyle}
+      labelShowBg={labelShowBg}
+      labelBgStyle={labelBgStyle}
+      labelBgPadding={labelBgPadding}
+      labelBgBorderRadius={labelBgBorderRadius}
+      style={style}
+      markerEnd={markerEnd}
+      markerStart={markerStart}
+      interactionWidth={interactionWidth}
+    />
+  );
+}
+
+function PipelineConnectionLine({
+  fromX,
+  fromY,
+  fromPosition,
+  toX,
+  toY,
+  toPosition,
+  connectionLineStyle
+}: ConnectionLineComponentProps) {
+  const [path] = pipelineSmoothStepPath({
+    sourceX: fromX,
+    sourceY: fromY,
+    sourcePosition: fromPosition,
+    targetX: toX,
+    targetY: toY,
+    targetPosition: toPosition
+  });
+
+  return <path className="react-flow__connection-path" d={path} fill="none" style={connectionLineStyle} />;
+}
+
+export function pipelineSmoothStepPath({
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition
+}: {
+  sourceX: number;
+  sourceY: number;
+  sourcePosition?: Position | null;
+  targetX: number;
+  targetY: number;
+  targetPosition?: Position | null;
+}): ReturnType<typeof getSmoothStepPath> {
+  return getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition: sourcePosition ?? Position.Right,
+    targetX,
+    targetY,
+    targetPosition: targetPosition ?? Position.Left
+  });
+}
 
 function readRecentConnectorTypes(): string[] {
   try {

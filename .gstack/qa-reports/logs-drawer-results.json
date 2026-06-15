@@ -1,0 +1,35 @@
+{
+  "defaultState": {
+    "hasDialog": 0,
+    "hasLogsButton": 1,
+    "visiblePipelineLogsText": 0,
+    "builderGridBox": {
+      "x": 10,
+      "y": 124,
+      "width": 1420,
+      "height": 826,
+      "top": 124,
+      "right": 1430,
+      "bottom": 950,
+      "left": 10
+    }
+  },
+  "openState": {
+    "hasDialog": 1,
+    "drawerBox": {
+      "x": 160,
+      "y": 459,
+      "width": 1120,
+      "height": 491,
+      "top": 459,
+      "right": 1280,
+      "bottom": 950,
+      "left": 160
+    },
+    "logListText": "RUNTIME STREAM\nPipeline logs\nClose\n2:00:29 AM\nfailed\ncompiler\n\npipeline could not be loaded by OneStep: unsupported resource type 'rabbitmq' for resource 'cred_PROD_RABBITMQ'\n\n2:00:40 AM\nfailed\ncompiler\n\npipeline could not be loaded by OneStep: unsupported resource type 'rabbitmq' for resource 'cred_PROD_RABBITMQ'\n\n2:15:22 AM\nstarted\nruntime\n\ncompiled pipeline order: n1, n2, n3\n\n2:20:10 AM\nstopped\nruntime\n\npipeline marked stopped after Web server restart\n\n2:20:22 AM\nstarted\nruntime\n\ncompiled pipeline order: n1, n2, n3\n\n2:20:53 AM\nfetched\nn1\n\ntask fetched\n\n2:20:53 AM\nstarted\nn1\n\ntask started\n\n2:20:53 AM\nsucceeded\nn1\n\ntask succeeded\n\n2:20:53 AM\nfetched\nn2\n\ntask fetched\n\n2:20:53 AM\nstarted\nn2\n\ntask started\n\n2:20:53 AM\nsucceeded\nn2\n\ntask succeeded\n\n2:20:53 AM\nfetched\nn3\n\ntask fetched\n\n2:20:53 AM\nstarted\nn3\n\ntask started\n\n2:20:53 AM\nsucceeded\nn3\n\ntask succeeded\n\n2:23:57 AM\nstopped\nruntime\n\npipeline stopped"
+  },
+  "closedState": {
+    "hasDialog": 0
+  },
+  "consoleErrors": []
+}

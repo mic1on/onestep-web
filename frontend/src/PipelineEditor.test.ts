@@ -6,9 +6,12 @@ import {
   handlesForNodeKind,
   nextGraphNodeId,
   nextNodePosition,
+  pipelineSmoothStepPath,
   removeGraphNode,
   validateConditionExpression,
+  validatePipelineGraph,
   validatePipelineGraphConditions,
+  validatePipelineGraphIssues,
   validateGraphConnection
 } from "./PipelineEditor";
 import type { GraphNode, PipelineGraph } from "./types";
@@ -60,6 +63,19 @@ describe("validateGraphConnection", () => {
 });
 
 describe("connection affordances", () => {
+  it("draws smooth connection paths when React Flow reports null handle positions", () => {
+    expect(() =>
+      pipelineSmoothStepPath({
+        sourceX: 120,
+        sourceY: 80,
+        sourcePosition: null,
+        targetX: 360,
+        targetY: 120,
+        targetPosition: null
+      })
+    ).not.toThrow();
+  });
+
   it("exposes only legal handles for each node kind", () => {
     expect(handlesForNodeKind("source")).toEqual({ source: true, target: false });
     expect(handlesForNodeKind("handler")).toEqual({ source: true, target: true });
@@ -202,6 +218,60 @@ describe("condition validation", () => {
     expect(validatePipelineGraphConditions(graph)).toEqual([
       "Connection source -> handler: conditions can only start from handler nodes.",
       "Connection handler -> sink: Condition cannot end with an operator."
+    ]);
+  });
+});
+
+describe("pipeline graph validation", () => {
+  it("accepts a connected source-handler-sink graph", () => {
+    const validHandler = { ...handler("handler"), mapping: { id: "{{order_id}}" }, mode: "visual" as const };
+    const graph: PipelineGraph = {
+      nodes: [source("source"), validHandler, sink("sink")],
+      edges: [
+        { from: "source", to: "handler" },
+        { from: "handler", to: "sink" }
+      ]
+    };
+
+    expect(validatePipelineGraph(graph)).toEqual([]);
+  });
+
+  it("rejects graphs that are not ready for compile", () => {
+    const graph: PipelineGraph = {
+      nodes: [
+        source("source"),
+        { ...handler("handler"), mapping: { id: "{{order_id}}" }, mode: "visual" },
+        sink("sink")
+      ],
+      edges: []
+    };
+
+    expect(validatePipelineGraph(graph)).toEqual([
+      "source node source requires at least one outgoing edge",
+      "handler node handler requires at least one incoming edge",
+      "handler node handler requires at least one outgoing edge",
+      "sink node sink requires at least one incoming edge",
+      "pipeline graph must be connected"
+    ]);
+  });
+
+  it("returns node-scoped validation issues for canvas badges", () => {
+    const graph: PipelineGraph = {
+      nodes: [
+        source("source"),
+        { ...handler("handler"), mapping: {}, mode: "visual" },
+        sink("sink")
+      ],
+      edges: []
+    };
+
+    expect(validatePipelineGraphIssues(graph)).toEqual([
+      { message: "source node source requires at least one outgoing edge", nodeId: "source" },
+      { message: "handler node handler requires at least one incoming edge", nodeId: "handler" },
+      { message: "handler node handler requires at least one outgoing edge", nodeId: "handler" },
+      { message: "handler node handler visual mapping is empty", nodeId: "handler" },
+      { message: "sink node sink requires at least one incoming edge", nodeId: "sink" },
+      { message: "pipeline graph must be connected" }
     ]);
   });
 });

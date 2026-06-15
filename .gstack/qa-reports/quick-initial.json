@@ -1,0 +1,689 @@
+{
+  "title": "OneStep Web",
+  "consoleErrors": [],
+  "pageErrors": [],
+  "buttons": [
+    {
+      "i": 0,
+      "text": "Builder",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 250,
+        "y": 23.5,
+        "width": 92,
+        "height": 32,
+        "top": 23.5,
+        "right": 342,
+        "bottom": 55.5,
+        "left": 250
+      }
+    },
+    {
+      "i": 1,
+      "text": "Credentials",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 342,
+        "y": 23.5,
+        "width": 92,
+        "height": 32,
+        "top": 23.5,
+        "right": 434,
+        "bottom": 55.5,
+        "left": 342
+      }
+    },
+    {
+      "i": 2,
+      "text": "Save",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 1190.734375,
+        "y": 24.5,
+        "width": 49.640625,
+        "height": 30,
+        "top": 24.5,
+        "right": 1240.375,
+        "bottom": 54.5,
+        "left": 1190.734375
+      }
+    },
+    {
+      "i": 3,
+      "text": "Start",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 1246.375,
+        "y": 24.5,
+        "width": 47.46875,
+        "height": 30,
+        "top": 24.5,
+        "right": 1293.84375,
+        "bottom": 54.5,
+        "left": 1246.375
+      }
+    },
+    {
+      "i": 4,
+      "text": "Export",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 1299.84375,
+        "y": 24.5,
+        "width": 57.578125,
+        "height": 30,
+        "top": 24.5,
+        "right": 1357.421875,
+        "bottom": 54.5,
+        "left": 1299.84375
+      }
+    },
+    {
+      "i": 5,
+      "text": "Delete",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 1363.421875,
+        "y": 24.5,
+        "width": 57.578125,
+        "height": 30,
+        "top": 24.5,
+        "right": 1421,
+        "bottom": 54.5,
+        "left": 1363.421875
+      }
+    },
+    {
+      "i": 6,
+      "text": "valid export\nstopped",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 10,
+        "y": 74,
+        "width": 145.234375,
+        "height": 42,
+        "top": 74,
+        "right": 155.234375,
+        "bottom": 116,
+        "left": 10
+      }
+    },
+    {
+      "i": 7,
+      "text": "New Pipeline\ndraft",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 161.234375,
+        "y": 74,
+        "width": 136,
+        "height": 42,
+        "top": 74,
+        "right": 297.234375,
+        "bottom": 116,
+        "left": 161.234375
+      }
+    },
+    {
+      "i": 8,
+      "text": "Python Handler\nTransform payloads with visual mappings or Python code.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 216,
+        "width": 178,
+        "height": 63.71875,
+        "top": 216,
+        "right": 199,
+        "bottom": 279.71875,
+        "left": 21
+      }
+    },
+    {
+      "i": 9,
+      "text": "Webhook Source\nExpose an HTTP entrypoint.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 285.71875,
+        "width": 178,
+        "height": 49.859375,
+        "top": 285.71875,
+        "right": 199,
+        "bottom": 335.578125,
+        "left": 21
+      }
+    },
+    {
+      "i": 10,
+      "text": "Interval Source\nTrigger on fixed intervals.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 341.578125,
+        "width": 178,
+        "height": 49.859375,
+        "top": 341.578125,
+        "right": 199,
+        "bottom": 391.4375,
+        "left": 21
+      }
+    },
+    {
+      "i": 11,
+      "text": "MySQL Source\nRead from MySQL table_queue, incremental rows, or binlog.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 397.4375,
+        "width": 178,
+        "height": 63.71875,
+        "top": 397.4375,
+        "right": 199,
+        "bottom": 461.15625,
+        "left": 21
+      }
+    },
+    {
+      "i": 12,
+      "text": "HTTP Sink\nCall an external HTTP endpoint.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 467.15625,
+        "width": 178,
+        "height": 49.859375,
+        "top": 467.15625,
+        "right": 199,
+        "bottom": 517.015625,
+        "left": 21
+      }
+    },
+    {
+      "i": 13,
+      "text": "MySQL Sink\nWrite rows to a MySQL table.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 523.015625,
+        "width": 178,
+        "height": 49.859375,
+        "top": 523.015625,
+        "right": 199,
+        "bottom": 572.875,
+        "left": 21
+      }
+    },
+    {
+      "i": 14,
+      "text": "RabbitMQ Source\nConsume messages from a RabbitMQ queue.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 610.875,
+        "width": 178,
+        "height": 63.71875,
+        "top": 610.875,
+        "right": 199,
+        "bottom": 674.59375,
+        "left": 21
+      }
+    },
+    {
+      "i": 15,
+      "text": "Redis Stream Source\nConsume Redis Stream entries.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 680.59375,
+        "width": 178,
+        "height": 49.859375,
+        "top": 680.59375,
+        "right": 199,
+        "bottom": 730.453125,
+        "left": 21
+      }
+    },
+    {
+      "i": 16,
+      "text": "SQS Source\nConsume AWS SQS messages.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 736.453125,
+        "width": 178,
+        "height": 49.859375,
+        "top": 736.453125,
+        "right": 199,
+        "bottom": 786.3125,
+        "left": 21
+      }
+    },
+    {
+      "i": 17,
+      "text": "Cron Source\nTrigger from cron expressions.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 792.3125,
+        "width": 178,
+        "height": 49.859375,
+        "top": 792.3125,
+        "right": 199,
+        "bottom": 842.171875,
+        "left": 21
+      }
+    },
+    {
+      "i": 18,
+      "text": "Feishu Bitable Source\nRead incremental Feishu Bitable records.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 848.171875,
+        "width": 178,
+        "height": 63.71875,
+        "top": 848.171875,
+        "right": 199,
+        "bottom": 911.890625,
+        "left": 21
+      }
+    },
+    {
+      "i": 19,
+      "text": "RabbitMQ Sink\nPublish messages to RabbitMQ.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 949.890625,
+        "width": 178,
+        "height": 49.859375,
+        "top": 949.890625,
+        "right": 199,
+        "bottom": 999.75,
+        "left": 21
+      }
+    },
+    {
+      "i": 20,
+      "text": "Redis Stream Sink\nAppend entries to a Redis Stream.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 1005.75,
+        "width": 178,
+        "height": 63.71875,
+        "top": 1005.75,
+        "right": 199,
+        "bottom": 1069.46875,
+        "left": 21
+      }
+    },
+    {
+      "i": 21,
+      "text": "SQS Sink\nPublish messages to AWS SQS.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 1075.46875,
+        "width": 178,
+        "height": 49.859375,
+        "top": 1075.46875,
+        "right": 199,
+        "bottom": 1125.328125,
+        "left": 21
+      }
+    },
+    {
+      "i": 22,
+      "text": "Feishu Bitable Sink\nWrite records to Feishu Bitable.",
+      "aria": null,
+      "title": null,
+      "disabled": false,
+      "rect": {
+        "x": 21,
+        "y": 1131.328125,
+        "width": 178,
+        "height": 49.859375,
+        "top": 1131.328125,
+        "right": 199,
+        "bottom": 1181.1875,
+        "left": 21
+      }
+    },
+    {
+      "i": 23,
+      "text": "Edit",
+      "aria": null,
+      "title": "Configure node",
+      "disabled": false,
+      "rect": {
+        "x": 375.875,
+        "y": 242,
+        "width": 32.890625,
+        "height": 22,
+        "top": 242,
+        "right": 408.765625,
+        "bottom": 264,
+        "left": 375.875
+      }
+    },
+    {
+      "i": 24,
+      "text": "Copy",
+      "aria": null,
+      "title": "Duplicate node",
+      "disabled": false,
+      "rect": {
+        "x": 412.765625,
+        "y": 242,
+        "width": 39,
+        "height": 22,
+        "top": 242,
+        "right": 451.765625,
+        "bottom": 264,
+        "left": 412.765625
+      }
+    },
+    {
+      "i": 25,
+      "text": "Cut",
+      "aria": null,
+      "title": "Disconnect node",
+      "disabled": false,
+      "rect": {
+        "x": 455.765625,
+        "y": 242,
+        "width": 30.671875,
+        "height": 22,
+        "top": 242,
+        "right": 486.4375,
+        "bottom": 264,
+        "left": 455.765625
+      }
+    },
+    {
+      "i": 26,
+      "text": "Del",
+      "aria": null,
+      "title": "Delete node",
+      "disabled": false,
+      "rect": {
+        "x": 490.4375,
+        "y": 242,
+        "width": 29.5625,
+        "height": 22,
+        "top": 242,
+        "right": 520,
+        "bottom": 264,
+        "left": 490.4375
+      }
+    },
+    {
+      "i": 27,
+      "text": "Edit",
+      "aria": null,
+      "title": "Configure node",
+      "disabled": false,
+      "rect": {
+        "x": 675.875,
+        "y": 242,
+        "width": 32.890625,
+        "height": 22,
+        "top": 242,
+        "right": 708.765625,
+        "bottom": 264,
+        "left": 675.875
+      }
+    },
+    {
+      "i": 28,
+      "text": "Copy",
+      "aria": null,
+      "title": "Duplicate node",
+      "disabled": false,
+      "rect": {
+        "x": 712.765625,
+        "y": 242,
+        "width": 39,
+        "height": 22,
+        "top": 242,
+        "right": 751.765625,
+        "bottom": 264,
+        "left": 712.765625
+      }
+    },
+    {
+      "i": 29,
+      "text": "Cut",
+      "aria": null,
+      "title": "Disconnect node",
+      "disabled": false,
+      "rect": {
+        "x": 755.765625,
+        "y": 242,
+        "width": 30.671875,
+        "height": 22,
+        "top": 242,
+        "right": 786.4375,
+        "bottom": 264,
+        "left": 755.765625
+      }
+    },
+    {
+      "i": 30,
+      "text": "Del",
+      "aria": null,
+      "title": "Delete node",
+      "disabled": false,
+      "rect": {
+        "x": 790.4375,
+        "y": 242,
+        "width": 29.5625,
+        "height": 22,
+        "top": 242,
+        "right": 820,
+        "bottom": 264,
+        "left": 790.4375
+      }
+    },
+    {
+      "i": 31,
+      "text": "Edit",
+      "aria": null,
+      "title": "Configure node",
+      "disabled": false,
+      "rect": {
+        "x": 962.875,
+        "y": 201,
+        "width": 32.890625,
+        "height": 22,
+        "top": 201,
+        "right": 995.765625,
+        "bottom": 223,
+        "left": 962.875
+      }
+    },
+    {
+      "i": 32,
+      "text": "Copy",
+      "aria": null,
+      "title": "Duplicate node",
+      "disabled": false,
+      "rect": {
+        "x": 999.765625,
+        "y": 201,
+        "width": 39,
+        "height": 22,
+        "top": 201,
+        "right": 1038.765625,
+        "bottom": 223,
+        "left": 999.765625
+      }
+    },
+    {
+      "i": 33,
+      "text": "Cut",
+      "aria": null,
+      "title": "Disconnect node",
+      "disabled": false,
+      "rect": {
+        "x": 1042.765625,
+        "y": 201,
+        "width": 30.671875,
+        "height": 22,
+        "top": 201,
+        "right": 1073.4375,
+        "bottom": 223,
+        "left": 1042.765625
+      }
+    },
+    {
+      "i": 34,
+      "text": "Del",
+      "aria": null,
+      "title": "Delete node",
+      "disabled": false,
+      "rect": {
+        "x": 1077.4375,
+        "y": 201,
+        "width": 29.5625,
+        "height": 22,
+        "top": 201,
+        "right": 1107,
+        "bottom": 223,
+        "left": 1077.4375
+      }
+    },
+    {
+      "i": 35,
+      "text": "",
+      "aria": "Zoom In",
+      "title": "Zoom In",
+      "disabled": false,
+      "rect": {
+        "x": 234,
+        "y": 582,
+        "width": 26,
+        "height": 30,
+        "top": 582,
+        "right": 260,
+        "bottom": 612,
+        "left": 234
+      }
+    },
+    {
+      "i": 36,
+      "text": "",
+      "aria": "Zoom Out",
+      "title": "Zoom Out",
+      "disabled": false,
+      "rect": {
+        "x": 234,
+        "y": 612,
+        "width": 26,
+        "height": 30,
+        "top": 612,
+        "right": 260,
+        "bottom": 642,
+        "left": 234
+      }
+    },
+    {
+      "i": 37,
+      "text": "",
+      "aria": "Fit View",
+      "title": "Fit View",
+      "disabled": false,
+      "rect": {
+        "x": 234,
+        "y": 642,
+        "width": 26,
+        "height": 30,
+        "top": 642,
+        "right": 260,
+        "bottom": 672,
+        "left": 234
+      }
+    },
+    {
+      "i": 38,
+      "text": "",
+      "aria": "Toggle Interactivity",
+      "title": "Toggle Interactivity",
+      "disabled": false,
+      "rect": {
+        "x": 234,
+        "y": 672,
+        "width": 26,
+        "height": 30,
+        "top": 672,
+        "right": 260,
+        "bottom": 702,
+        "left": 234
+      }
+    }
+  ],
+  "inputs": [
+    {
+      "i": 0,
+      "tag": "INPUT",
+      "type": null,
+      "placeholder": null,
+      "aria": null,
+      "value": "valid export"
+    },
+    {
+      "i": 1,
+      "tag": "INPUT",
+      "type": null,
+      "placeholder": "Node name, type, or description",
+      "aria": null,
+      "value": ""
+    }
+  ],
+  "visibleText": "OS\nOneStep WebVisual pipeline builder\nBuilder\nCredentials\nPipeline\nSave\nStart\nExport\nDelete\nvalid export\nstopped\nNew Pipeline\ndraft\nReady\nSEARCH\nCommon\nPython Handler\nTransform payloads with visual mappings or Python code.\nWebhook Source\nExpose an HTTP entrypoint.\nInterval Source\nTrigger on fixed intervals.\nMySQL Source\nRead from MySQL table_queue, incremental rows, or binlog.\nHTTP Sink\nCall an external HTTP endpoint.\nMySQL Sink\nWrite rows to a MySQL table.\nSource\nRabbitMQ Source\nConsume messages from a RabbitMQ queue.\nRedis Stream Source\nConsume Redis Stream entries.\nSQS Source\nConsume AWS SQS messages.\nCron Source\nTrigger from cron expressions.\nFeishu Bitable Source\nRead incremental Feishu Bitable records.\nSink\nRabbitMQ Sink\nPublish messages to RabbitMQ.\nRedis Stream Sink\nAppend entries to a Redis Stream.\nSQS Sink\nPublish messages to AWS SQS.\nFeishu Bitable Sink\nWrite records to Feishu Bitable.\nEdit\nCopy\nCut\nDel\nSOURCE\nrabbitmq_source\nn1\nEdit\nCopy\nCut\nDel\nHANDLER\nhandler\nn2\nEdit\nCopy\nCut\nDel\nSINK\nrabbitmq_sink\nn3\nReact Flow\nProperties\n\nSelect a node to configure connector details, credentials, mappings, or Python code.\n\nRUNTIME STREAM\nPipeline logs\n2:00:29 AM\nfailed\ncompiler\n\npipeline could not be loaded by OneStep: unsupported resource type 'rabbitmq' for resource 'cred_PROD_RABBITMQ'\n\n2:00:40 AM\nfailed\ncompiler\n\npipeline could not be loaded by OneStep: unsupported resource type 'rabbitmq' for resource 'cred_PROD_RABBITMQ'\n\n2:15:22 AM\nstarted\nruntime\n\ncompiled pipeline order: n1, n2, n3\n\n2:20:10 AM\nstopped\nruntime\n\npipeline marked stopped after Web server restart\n\n2:20:22 AM\nstarted\nruntime\n\ncompiled pipeline order: n1, n2, n3\n\n2:20:53 AM\nfetched\nn1\n\ntask fetched\n\n2:20:53 AM\nstarted\nn1\n\ntask started\n\n2:20:53 AM\nsucceeded\nn1\n\ntask succeeded\n\n2:20:53 AM\nfetched\nn2\n\ntask fetched\n\n2:20:53 AM\nstarted\nn2\n\ntask started\n\n2:20:53 AM\nsucceeded\nn2\n\ntask succeeded\n\n2:20:53 AM\nfetched\nn3\n\ntask fetched\n\n2:20:53 AM\nstarted\nn3\n\ntask started\n\n2:20:53 AM\nsucceeded\nn3\n\ntask succeeded\n\n2:23:57 AM\nstopped\nruntime\n\npipeline stopped"
+}

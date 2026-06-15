@@ -11,6 +11,7 @@ from onestep_web.onestep_adapter import build_runtime_app
 from onestep_web.schemas import PipelineGraph, RuntimeStatus
 
 LogSink = Callable[[str, str, str], Awaitable[None]]
+RuntimeCompletionSink = Callable[[str, str, str], Awaitable[None]]
 
 
 @dataclass
@@ -24,8 +25,13 @@ class RuntimeHandle:
 
 
 class PipelineRuntimePool:
-    def __init__(self, compiler: PipelineCompiler | None = None) -> None:
+    def __init__(
+        self,
+        compiler: PipelineCompiler | None = None,
+        completion_sink: RuntimeCompletionSink | None = None,
+    ) -> None:
         self.compiler = compiler or PipelineCompiler()
+        self.completion_sink = completion_sink
         self._tasks: dict[str, RuntimeHandle] = {}
 
     async def start(
@@ -111,4 +117,7 @@ class PipelineRuntimePool:
         handle = self._tasks.pop(pipeline_id, None)
         if handle is not None:
             sys.modules.pop(handle.app_module, None)
-        await log("failed", "runtime", f"pipeline failed: {error}")
+        message = f"pipeline failed: {error}"
+        await log("failed", "runtime", message)
+        if self.completion_sink is not None:
+            await self.completion_sink(pipeline_id, "error", message)

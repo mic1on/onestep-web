@@ -15,7 +15,16 @@ const CATEGORY_LABELS = {
   sink: "Sink"
 };
 
-const COMMON_CONNECTOR_TYPES = ["handler", "webhook_source", "interval_source", "mysql_source", "http_sink", "mysql_sink"];
+const COMMON_CONNECTOR_TYPES = [
+  "handler",
+  "webhook_source",
+  "interval_source",
+  "mysql_source",
+  "postgres_source",
+  "http_sink",
+  "mysql_sink",
+  "postgres_sink"
+];
 
 export function NodePalette({ connectors, recentConnectorTypes, onAddNode }: NodePaletteProps) {
   const [query, setQuery] = useState("");

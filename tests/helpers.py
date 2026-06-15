@@ -78,6 +78,47 @@ def scheduled_http_graph() -> dict:
     }
 
 
+def postgres_graph() -> dict:
+    return {
+        "nodes": [
+            {
+                "id": "orders",
+                "type": "postgres_source",
+                "kind": "source",
+                "credential_ref": "PROD_POSTGRES",
+                "config": {
+                    "mode": "incremental",
+                    "table": "orders",
+                    "key": "id",
+                    "cursor_column": "updated_at",
+                    "batch_size": 25,
+                },
+                "position": {"x": 120, "y": 160},
+            },
+            {
+                "id": "shape",
+                "type": "handler",
+                "kind": "handler",
+                "mode": "visual",
+                "mapping": {"id": "{{id}}", "status": "{{status}}"},
+                "position": {"x": 420, "y": 160},
+            },
+            {
+                "id": "processed",
+                "type": "postgres_sink",
+                "kind": "sink",
+                "credential_ref": "PROD_POSTGRES",
+                "config": {"table": "processed_orders", "mode": "upsert", "keys": "id"},
+                "position": {"x": 720, "y": 160},
+            },
+        ],
+        "edges": [
+            {"from": "orders", "to": "shape"},
+            {"from": "shape", "to": "processed"},
+        ],
+    }
+
+
 def conditional_sink_graph() -> dict:
     graph = scheduled_http_graph()
     graph["nodes"][1]["mapping"] = {

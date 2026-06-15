@@ -16,9 +16,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `${response.status} ${response.statusText}`);
+    throw new Error(formatErrorBody(body) || `${response.status} ${response.statusText}`);
   }
   return (await response.json()) as T;
+}
+
+function formatErrorBody(body: string): string {
+  if (!body) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown; detail?: unknown; error?: unknown };
+    const message = parsed.message ?? parsed.detail ?? parsed.error;
+    if (typeof message === "string") {
+      return message;
+    }
+  } catch {
+    return body;
+  }
+  return body;
 }
 
 export const api = {
@@ -41,7 +57,7 @@ export const api = {
   async deletePipeline(id: string): Promise<void> {
     const response = await fetch(`/api/pipelines/${id}`, { method: "DELETE" });
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(formatErrorBody(await response.text()));
     }
   },
   async startPipeline(id: string): Promise<RuntimeStatus> {
@@ -86,7 +102,7 @@ export const api = {
   async deleteCredential(id: string): Promise<void> {
     const response = await fetch(`/api/credentials/${id}`, { method: "DELETE" });
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(formatErrorBody(await response.text()));
     }
   },
   async listLogs(id: string): Promise<PipelineLog[]> {
@@ -113,7 +129,7 @@ export const api = {
   async exportPipeline(id: string): Promise<Blob> {
     const response = await fetch(`/api/pipelines/${id}/export`, { method: "POST" });
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw new Error(formatErrorBody(await response.text()));
     }
     return response.blob();
   }

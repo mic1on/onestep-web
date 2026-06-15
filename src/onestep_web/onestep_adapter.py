@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import sys
 import types
@@ -102,6 +103,8 @@ def build_requirements(graph: PipelineGraph) -> list[str]:
         connector = _connector_family(node.type)
         if connector in {"mysql", "rabbitmq", "redis", "sqs"}:
             extras.add(connector)
+        elif connector == "postgres":
+            packages.add("onestep-postgres")
         elif connector == "feishu_bitable":
             packages.add("onestep-feishu-bitable")
     return [f"onestep[{','.join(sorted(extras))}]", *sorted(packages)]
@@ -196,6 +199,8 @@ def _connection_spec(
         return {"type": "rabbitmq", "url": _first_config_value(raw_config, "url", "dsn")}
     if family == "mysql":
         return {"type": "mysql", "dsn": _sync_mysql_dsn(_first_config_value(raw_config, "dsn", "url"))}
+    if family == "postgres":
+        return {"type": "postgres", "dsn": _sync_postgres_dsn(_first_config_value(raw_config, "dsn", "url"))}
     if family == "redis":
         return {"type": "redis", "url": _first_config_value(raw_config, "url", "dsn")}
     if family == "sqs":
@@ -246,6 +251,42 @@ def _connector_node_spec(node: GraphNode, family: str, connection_name: str) -> 
     if family == "mysql":
         spec = {
             "type": "mysql_table_sink",
+            "connector": connection_name,
+            "table": config.get("table", node.id),
+            "mode": config.get("mode", "insert"),
+        }
+        if "keys" in config:
+            spec["keys"] = _string_list(config["keys"])
+        return spec
+    if family == "postgres" and _node_kind(node) == "source":
+        mode = str(config.get("mode", "incremental")).strip().lower()
+        if mode == "table_queue":
+            spec = {
+                "type": "postgres_table_queue",
+                "connector": connection_name,
+                "table": config.get("table", node.id),
+                "key": config.get("key", "id"),
+                "where": config.get("where", "status = 'pending'"),
+                "claim": _mapping_config(config, "claim", {"status": "processing"}),
+                "ack": _mapping_config(config, "ack", {"status": "done"}),
+            }
+            nack = _optional_mapping_config(config, "nack")
+            if nack is not None:
+                spec["nack"] = nack
+            _copy_optional(spec, config, "batch_size", "poll_interval_s")
+            return spec
+        spec = {
+            "type": "postgres_incremental",
+            "connector": connection_name,
+            "table": config.get("table", node.id),
+            "key": config.get("key", "id"),
+            "cursor": _postgres_cursor(config),
+        }
+        _copy_optional(spec, config, "where", "batch_size", "poll_interval_s", "state", "state_key")
+        return spec
+    if family == "postgres":
+        spec = {
+            "type": "postgres_table_sink",
             "connector": connection_name,
             "table": config.get("table", node.id),
             "mode": config.get("mode", "insert"),
@@ -516,6 +557,8 @@ def _connector_family(node_type: str) -> str:
         return "rabbitmq"
     if node_type.startswith("mysql_"):
         return "mysql"
+    if node_type.startswith("postgres_"):
+        return "postgres"
     if node_type.startswith("redis_"):
         return "redis"
     if node_type.startswith("sqs_"):
@@ -571,6 +614,14 @@ def _sync_mysql_dsn(dsn: Any) -> Any:
     return dsn
 
 
+def _sync_postgres_dsn(dsn: Any) -> Any:
+    if isinstance(dsn, str) and dsn.startswith("postgresql://"):
+        return "postgresql+psycopg://" + dsn.removeprefix("postgresql://")
+    if isinstance(dsn, str) and dsn.startswith("postgres://"):
+        return "postgresql+psycopg://" + dsn.removeprefix("postgres://")
+    return dsn
+
+
 def _copy_optional(target: dict[str, Any], source: Mapping[str, Any], *keys: str) -> None:
     for key in keys:
         if key in source and source[key] is not None:
@@ -579,6 +630,39 @@ def _copy_optional(target: dict[str, Any], source: Mapping[str, Any], *keys: str
 
 def _only_present(source: Mapping[str, Any], *keys: str) -> dict[str, Any]:
     return {key: source[key] for key in keys if key in source and source[key] is not None}
+
+
+def _postgres_cursor(config: Mapping[str, Any]) -> list[str]:
+    key = str(config.get("key", "id"))
+    raw_cursor = config.get("cursor")
+    if raw_cursor is None:
+        raw_cursor = [config.get("cursor_column", "updated_at"), key]
+    cursor = _string_list(raw_cursor)
+    return cursor if key in cursor else [*cursor, key]
+
+
+def _mapping_config(config: Mapping[str, Any], key: str, default: dict[str, Any]) -> dict[str, Any]:
+    value = _optional_mapping_config(config, key)
+    return value if value is not None else dict(default)
+
+
+def _optional_mapping_config(config: Mapping[str, Any], key: str) -> dict[str, Any] | None:
+    if key not in config or config[key] is None:
+        return None
+    value = config[key]
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise PipelineCompileError(f"{key} must be a JSON object") from exc
+        if isinstance(parsed, Mapping):
+            return dict(parsed)
+    raise PipelineCompileError(f"{key} must be a JSON object")
 
 
 def _string_list(value: Any) -> list[str]:

@@ -1,0 +1,62 @@
+{
+  "startDisabledBefore": false,
+  "exportDisabledBefore": true,
+  "startDisabledAfterNode": false,
+  "exportDisabledAfterNode": true,
+  "responses": [
+    {
+      "url": "http://127.0.0.1:5173/api/connectors",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/pipelines",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/connectors",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/credentials",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/pipelines",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/credentials",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/pipelines/pipe_ca2da42a36ae4291aa78a0e73191c47f/logs",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/pipelines",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/pipelines/pipe_068431c94a9b43babb94ceeeba698a38/start",
+      "status": 422,
+      "method": "POST"
+    },
+    {
+      "url": "http://127.0.0.1:5173/api/pipelines/pipe_068431c94a9b43babb94ceeeba698a38/logs",
+      "status": 200,
+      "method": "GET"
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 422 (Unprocessable Content)"
+  ],
+  "body": "OS\nOneStep WebVisual pipeline builder\nBuilder\nCredentials\nPipeline\nSave\nStart\nExport\nDelete\n订单同步管道\ndraft\nvalid export\nstopped\nNew Pipeline\ndraft\nCreated pipeline\nSEARCH\nRecent\nWebhook Source\nExpose an HTTP entrypoint.\nCommon\nPython Handler\nTransform payloads with visual mappings or Python code.\nWebhook Source\nExpose an HTTP entrypoint.\nInterval Source\nTrigger on fixed intervals.\nMySQL Source\nRead from MySQL table_queue, incremental rows, or binlog.\nHTTP Sink\nCall an external HTTP endpoint.\nMySQL Sink\nWrite rows to a MySQL table.\nSource\nRabbitMQ Source\nConsume messages from a RabbitMQ queue.\nRedis Stream Source\nConsume Redis Stream entries.\nSQS Source\nConsume AWS SQS messages.\nCron Source\nTrigger from cron expressions.\nFeishu Bitable Source\nRead incremental Feishu Bitable records.\nSink\nRabbitMQ Sink\nPublish messages to RabbitMQ.\nRedis Stream Sink\nAppend entries to a Redis Stream.\nSQS Sink\nPublish messages to AWS SQS.\nFeishu Bitable Sink\nWrite records to Feishu Bitable.\nEdit\nCopy\nCut\nDel\nSOURCE\nwebhook_source\nneeds output\nReact Flow\nSOURCE\nWebhook Source\n\nn1\n\nSTEP 1\nCONNECTION\nCredential\nDirect input\nPROD_RABBITMQ\nPath\nMethods\nSample Payload JSON\nSTEP 2\nSAMPLE DEBUG\nDEBUG\nFetch Sample\nRUNTIME STREAM\nPipeline logs\n4:28:41 AM\nfailed\ncompiler\n\nsource node n1 requires at least one outgoing edge"
+}
